@@ -772,6 +772,24 @@
             </form>
             <div id="messageStatus" style="margin-top: 1rem; color: #17f700;"></div>
         </div>
+
+        <!-- 基金邮件订阅/收发 -->
+        <div class="message-form" style="margin-top: 3rem;">
+            <h2 style="color:#fff; font-size: 2rem; margin-bottom: 2rem;">//send_etf_report</h2>
+            <form id="fundReportForm">
+                <div style="margin-bottom: 1rem;">
+                    <input type="email" id="fundEmail" placeholder="目标邮箱 (例如：example@foxmail.com)" required style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px;">
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <input type="text" id="fundCode" placeholder="基金/ETF 代码（可选）" style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px;">
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <textarea id="fundMessage" placeholder="补充说明（可选）" style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px; min-height: 100px; resize: vertical;"></textarea>
+                </div>
+                <button type="submit" style="background: #17f700; color: #0d1117; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: bold;">发送ETF分析报告</button>
+            </form>
+            <div id="fundReportStatus" style="margin-top: 1rem; color: #17f700;"></div>
+        </div>
         
         <!-- 显示留言 -->
         <div class="messages-list" style="margin-top: 3rem;">
@@ -1468,6 +1486,52 @@
             console.error('Error loading messages:', error);
         }
     }
+
+    // 基金报告邮件接口调用：请把 URL 改为你后端部署地址（例如 https://your-backend-railway-url）
+    const ETF_BACKEND_API = 'http://localhost:5000';
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const fundReportForm = document.getElementById('fundReportForm');
+        if (fundReportForm) {
+            fundReportForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const email = document.getElementById('fundEmail').value.trim();
+                const fundCode = document.getElementById('fundCode').value.trim();
+                const text = document.getElementById('fundMessage').value.trim();
+                const statusEl = document.getElementById('fundReportStatus');
+
+                if (!email) {
+                    statusEl.textContent = '请填写收件邮箱。';
+                    return;
+                }
+
+                statusEl.textContent = '正在请求发送报告，请稍候...';
+
+                try {
+                    const resp = await fetch(`${ETF_BACKEND_API}/api/send_report`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            emails: [email],
+                            fund_code: fundCode || undefined,
+                            note: text || undefined,
+                        }),
+                    });
+
+                    const result = await resp.json();
+                    if (resp.ok) {
+                        statusEl.textContent = '请求已发送，后台正在处理邮件：' + (result.message || '请到邮箱查看。');
+                        fundReportForm.reset();
+                    } else {
+                        statusEl.textContent = '发送失败：' + (result.error || '请稍后再试。');
+                    }
+                } catch (err) {
+                    statusEl.textContent = '网络异常，请检查后端是否可用。';
+                    console.error(err);
+                }
+            });
+        }
+    });
 </script>
 </body>
 </html>
