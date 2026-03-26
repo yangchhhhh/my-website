@@ -1,1537 +1,2584 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>YangChen · 终端矩阵 | 个人网页</title>
-    <script src="https://fastly.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
-    <script src="https://fastly.jsdelivr.net/npm/@studio-freight/lenis@1.0.33/dist/lenis.min.js"></script>
-    <style>
-        /* ---------- 全局重置 & 基础风格 ---------- */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Courier New', 'Fira Code', monospace;
-            scrollbar-width: none;
-        }
-        *::-webkit-scrollbar { display: none; }
-        body {
-            background-color: #0d1117;
-            color: #17f700;
-            overflow-x: hidden;
-            position: relative;
-        }
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+增强版ETF分析系统 - 100%国内API + 智能预测 + 多因子分析 + 实时监控
+功能：
+- 追踪核心指数（黄金ETF、沪深300、人工智能ETF、主要消费、高成长产业、半导体、纳指、农业、资源）
+- 集成Tushare财经新闻与情感分析
+- 使用ARIMA+技术指标组合预测
+- 多因子量化分析
+- 行业轮动分析
+- 资金流分析
+- 市场情绪分析
+- 机器学习预测增强
+- 相关性分析
+- 提供专业级买卖建议
+- 实时监控功能（9:00-17:00，每6小时检测一次）
+- 机会/危险预警邮件通知
+- 机器学习模型优化
+- 发现市场上有潜力的ETF基金
 
-        /* ---------- 统一加载遮罩 ---------- */
-        .global-loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100vh;
-            background-color: #f7f7f7;
-            z-index: 1000000;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            transition: 1s ease;
-            pointer-events: none;
-        }
-        .global-loading svg {
-            width: 5rem;
-            margin-bottom: 2rem;
-            overflow: visible;
-            transition: 0.3s ease;
-        }
-        .global-loading svg circle {
-            fill: none;
-            stroke: #171717;
-            stroke-width: 12;
-            stroke-dasharray: 160;
-            stroke-dashoffset: 160;
-            transform-origin: center;
-            animation: circle_rotate 3s ease-in infinite;
-        }
-        @keyframes circle_rotate {
-            0% { transform: rotate(0deg); stroke-dashoffset: 160; }
-            100% { transform: rotate(360deg); stroke-dashoffset: -160; }
-        }
-        .global-loading p {
-            font-family: sans-serif;
-            font-size: 2rem;
-            color: #171717;
-            font-weight: 900;
-            transition: 0.3s ease;
-        }
-        .global-loading.loading_out {
-            transform: translateY(100%);
-        }
-        .global-loading.loading_out svg,
-        .global-loading.loading_out p {
-            opacity: 0;
-        }
+# 每天9:00运行 (推荐)
+0 9 * * * /usr/bin/python3 /home/orangepi/enhance_etf.py > /home/orangepi/etf_cron.log 2>&1
 
-        /* 全局返回按钮 (仅非主页显示) */
-        .global-back {
-            position: fixed;
-            top: 2rem;
-            left: 2rem;
-            z-index: 2000;
-            padding: 1rem 2rem;
-            background: #17f700;
-            color: #0d1117;
-            font-weight: bold;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: 0.3s;
-            font-size: 1.2rem;
-            box-shadow: 0 0 12px rgba(23,247,0,0.5);
-            backdrop-filter: blur(2px);
-        }
-        .global-back:hover {
-            background: #fff;
-            transform: scale(1.05);
-        }
-        .global-back.hide {
-            display: none;
-        }
+# 每两天9:00运行
+0 9 */2 * * /usr/bin/python3 /home/orangepi/enhance_etf.py > /home/orangepi/etf_cron.log 2>&1
 
-        /* 页面容器 (单页切换核心) */
-        .page {
-            display: none;
-            opacity: 0;
-            transition: opacity 0.4s ease;
-        }
-        .page.active {
-            display: block;
-            opacity: 1;
-        }
+# 每周一、三、五 9:00运行
+0 9 * * 1,3,5 /usr/bin/python3 /home/orangepi/enhance_etf.py > /home/orangepi/etf_cron.log 2>&1
+"""
 
-        /* ---------- MAIN 页面特有样式 ---------- */
-        .bg-scroll-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 0;
-            pointer-events: none;
-            opacity: 0.1;
-        }
-        .bg-scroll-container svg {
-            width: 80vw;
-        }
-        .bg-scroll-container svg text {
-            font-size: 50px;
-            font-weight: bold;
-            fill: none;
-            stroke: #17f700;
-            stroke-width: 1;
-            stroke-dasharray: 150;
-            stroke-dashoffset: 150;
-            text-transform: uppercase;
-        }
-        .content-wrapper {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 10rem 0;
-        }
-        .profile-section {
-            text-align: center;
-            margin-bottom: 10rem;
-            background: rgba(13, 17, 23, 0.85);
-            padding: 5rem;
-            border-radius: 2rem;
-            border: 2px solid #17f700;
-            box-shadow: 0 0 30px rgba(23, 247, 0, 0.3);
-            backdrop-filter: blur(5px);
-            width: 80%;
-            max-width: 900px;
-        }
-        .profile-img {
-            width: 18rem;
-            height: 18rem;
-            border-radius: 50%;
-            border: 0.4rem solid #17f700;
-            margin: 0 auto 3rem;
-            overflow: hidden;
-            object-fit: cover;
-        }
-        .info-text {
-            font-size: 1.8rem;
-            margin: 1.2rem 0;
-            line-height: 1.6;
-            color: #fff;
-        }
-        .info-text span {
-            color: #17f700;
-            font-weight: bold;
-        }
-        /* 扑克导航 */
-        .poker-section {
-            position: relative;
-            width: 100%;
-            height: 80vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 10rem;
-        }
-        .poker-container {
-            position: relative;
-            width: 45rem;
-            height: 35rem;
-        }
-        .poker {
-            position: absolute;
-            width: 22rem;
-            height: 30rem;
-            border: 0.2rem solid #fff;
-            border-radius: 1.5rem;
-            background-color: #333;
-            transform-origin: bottom left;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-shadow: -10px 10px 30px rgba(0,0,0,0.8);
-            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-        }
-        .poker h2 {
-            font-size: 3rem;
-            transform: rotate(-90deg);
-            white-space: nowrap;
-            pointer-events: none;
-        }
-        .poker_top {
-            position: absolute;
-            width: 22rem;
-            height: 30rem;
-            background-color: transparent;
-            cursor: pointer;
-            z-index: 1000;
-        }
-        .enter-btn {
-            margin-top: 2rem;
-            padding: 1rem 4rem;
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: #0d1117;
-            background-color: #17f700;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: 0.3s ease;
-            text-transform: uppercase;
-            box-shadow: 0 0 12px currentColor;
-        }
-        .enter-btn:hover {
-            filter: brightness(1.1);
-            transform: scale(1.05);
-        }
-        /* 留言板 */
-        .message-section {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 5rem 0;
-            margin-top: 5rem;
-            border-top: 2px dashed #333;
-        }
-        .message-form {
-            background: rgba(13, 17, 23, 0.9);
-            border: 2px solid #333;
-            padding: 3rem;
-            border-radius: 1rem;
-            width: 80%;
-            max-width: 600px;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            margin-bottom: 5rem;
-        }
-        .message-form h3 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-        .message-form input, .message-form textarea {
-            background: #0d1117;
-            border: 1px solid #17f700;
-            color: #fff;
-            padding: 1rem;
-            font-size: 1.2rem;
-        }
-        .message-form textarea {
-            height: 6rem;
-            resize: none;
-        }
-        .message-form button {
-            padding: 1rem;
-            background: #17f700;
-            color: #0d1117;
-            font-weight: bold;
-            font-size: 1.2rem;
-            border: none;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        #floatingMessagesArea {
-            position: relative;
-            width: 90%;
-            height: 60vh;
-            border: 2px dashed #17f700;
-            border-radius: 1rem;
-            overflow: hidden;
-            background: rgba(0,0,0,0.2);
-        }
-        .floating-message {
-            position: absolute;
-            background: rgba(23, 247, 0, 0.1);
-            border: 1px solid #17f700;
-            color: #fff;
-            padding: 1.5rem;
-            border-radius: 1rem;
-            cursor: move;
-            transition: opacity 0.3s;
-            white-space: nowrap;
-            backdrop-filter: blur(4px);
-            font-size: 0.9rem;
-        }
-        .floating-message span {
-            color: #17f700;
-            font-weight: bold;
-        }
+import os
+import time
+import datetime
+import pandas as pd
+import numpy as np
+import matplotlib as mpl
+# 设置中文字体
+mpl.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'SimHei', 'DejaVu Sans']
+mpl.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.ticker as ticker
+import seaborn as sns
+import smtplib
+import base64
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email import encoders
+import tushare as ts  # 国内财经数据API
+import akshare as ak  # 国内金融数据API
+import schedule
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.preprocessing import StandardScaler
+from xgboost import XGBRegressor
+from sklearn.model_selection import TimeSeriesSplit
+import requests
 
-        /* ---------- GAME 页面样式 (照片墙 + 游戏嵌入) ---------- */
-        .game-photos-container {
-            position: relative;
-            width: 100%;
-            height: 100vh;
-            overflow: hidden;
-        }
-        .infinite-photos {
-            position: absolute;
-            display: flex;
-            flex-direction: column;
-            cursor: grab;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        .infinite-photos:active { cursor: grabbing; }
-        .photos_line {
-            font-size: 1px;
-            height: 342em;
-            margin-bottom: 48em;
-            flex-shrink: 0;
-            display: flex;
-        }
-        .photo-item {
-            font-size: 1px;
-            width: 234em;
-            height: 100%;
-            margin-right: 36em;
-            flex-shrink: 0;
-            text-decoration: none;
-            display: block;
-            cursor: pointer;
-        }
-        .inner {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            transform-style: preserve-3d;
-            transition: transform 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-            border-radius: 15px;
-            border: 2px solid #17f700;
-            overflow: hidden;
-        }
-        .photo-item:hover .inner { transform: rotateY(180deg); box-shadow: 0 0 30px rgba(23,247,0,0.5); }
-        .front, .back {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            backface-visibility: hidden;
-            border-radius: 15px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            padding: 1rem;
-        }
-        .front {
-            background: rgba(0,0,0,0.7);
-        }
-        .front-img {
-            width: 80%;
-            max-width: 180px;
-            margin-bottom: 1rem;
-        }
-        .front-img img {
-            width: 100%;
-            border-radius: 8px;
-        }
-        .game-title {
-            font-size: 1.6rem;
-            color: #17f700;
-            margin: 0.5rem 0 0.2rem;
-        }
-        .game-sub {
-            font-size: 0.9rem;
-            color: #ccc;
-        }
-        .back {
-            background: #000000;
-            transform: rotateY(180deg);
-            border: 2px solid #17f700;
-            color: #fff;
-        }
-        .back h3 {
-            font-size: 1.6rem;
-            color: #17f700;
-            margin-bottom: 0.5rem;
-        }
-        .back p {
-            font-size: 0.9rem;
-            line-height: 1.4;
-            margin-bottom: 0.5rem;
-        }
-        .back .click-tip {
-            font-size: 0.8rem;
-            color: #aaa;
-            margin-top: 1rem;
-        }
+# ================
+# 配置区域
+# ================
 
-        /* 游戏 iframe 容器 */
-        .game-iframe-container {
-            position: relative;
-            width: 100%;
-            height: 100vh;
-            display: none;
-        }
-        .game-iframe-container iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        .back-to-gallery {
-            position: fixed;
-            bottom: 2rem;
-            left: 2rem;
-            z-index: 3000;
-            padding: 0.8rem 1.5rem;
-            background: #17f700;
-            color: #0d1117;
-            font-weight: bold;
-            border-radius: 40px;
-            cursor: pointer;
-            font-size: 1.2rem;
-            border: none;
-            box-shadow: 0 0 12px rgba(23,247,0,0.5);
-            transition: 0.3s;
-        }
-        .back-to-gallery:hover {
-            background: #fff;
-            transform: scale(1.05);
-        }
+# ETF配置 - 您关注的ETF/股票
+INDEX_CONFIG = {
+    'gold_etf': {
+        'code': '518880',  # 黄金ETF
+        'name': 'gold_ETF',
+        'market': 'sh',  # 上交所
+        'description': '华安黄金ETF',
+        'type': '黄金ETF'
+    },
+    'hengsheng_tech': {
+        'code': '520590',  # 恒科
+        'name': 'hs_tech',
+        'market': 'sh',  # 上交所
+        'description': '恒生科技',
+        'type': '恒科'
+    },
+    'hs300_etf': {
+        'code': '510300',  # 沪深300ETF
+        'name': 'hs_300ETF',
+        'market': 'sh',  # 上交所
+        'description': '华泰柏瑞沪深300ETF',
+        'type': '沪深300'
+    },
+    'ai_etf': {
+        'code': '515070',  # 人工智能ETF
+        'name': 'ai_ETF',
+        'market': 'sh',  # 上交所
+        'description': '华夏中证人工智能ETF',
+        'type': '人工智能ETF'
+    },
+    'consumer_etf': {
+        'code': '159928',  # 主要消费ETF
+        'name': 'main_consumption_ETF',
+        'market': 'sz',  # 深交所
+        'description': '汇添富中证主要消费ETF',
+        'type': '主要消费'
+    },
+    'growth_etf': {
+        'code': '512760',  # 高成长产业ETF
+        'name': 'high_growth_ETF',
+        'market': 'sh',  # 上交所
+        'description': '国泰中证新能源汽车ETF',
+        'type': '高成长产业'
+    },
+    'semiconductor_etf': {
+        'code': '512480',  # 半导体ETF
+        'name': 'bdt_ETF',
+        'market': 'sh',  # 上交所
+        'description': '国联安中证全指半导体ETF',
+        'type': '半导体'
+    },
+    'nasdaq_etf': {
+        'code': '513100',  # 纳指ETF
+        'name': 'nsdk_ETF',
+        'market': 'sh',  # 上交所
+        'description': '国泰纳斯达克100ETF',
+        'type': '纳斯达克'
+    },
+    'agriculture_etf': {
+        'code': '159825',  # 农业ETF
+        'name': 'agriculture_ETF',
+        'market': 'sz',  # 深交所
+        'description': '鹏华农业ETF',
+        'type': '农业'
+    },
+    'resources_etf': {
+        'code': '510410',  # 资源ETF
+        'name': 'resource_ETF',
+        'market': 'sh',  # 上交所
+        'description': '博时自然资源ETF',
+        'type': '资源'
+    }
+}
+# 新增板块配置
+SECTOR_CONFIG = {
+    'large_cap': {
+        'name': 'Large Cap',
+        'description': 'Large cap blue chip stocks',
+        'etfs': ['510300', '510050', '159919']  # 沪深300ETF, 上证50ETF, 沪深300ETF
+    },
+    'small_cap': {
+        'name': 'Small Cap', 
+        'description': 'Small cap growth stocks',
+        'etfs': ['159902', '159915', '512100']  # 中小板ETF, 创业板ETF, 中证1000ETF
+    },
+    'rmb_assets': {
+        'name': 'RMB Assets',
+        'description': 'RMB denominated safe haven assets',
+        'etfs': ['518880', '511880', '511990']  # 黄金ETF, 银华日利, 华宝添益
+    },
+    'overseas': {
+        'name': 'Overseas Markets',
+        'description': 'Global market diversification',
+        'etfs': ['513100', '513500', '164906']  # 纳指ETF, 标普500ETF, 中国互联
+    },
+    'bonds': {
+        'name': 'Bonds',
+        'description': 'Fixed income assets',
+        'etfs': ['511010', '511260', '159926']  # 国债ETF, 十年国债ETF, 国债ETF
+    },
+    'sector_rotation': {
+        'name': 'Sector Rotation',
+        'description': 'Different sector ETFs',
+        'etfs': ['512480', '515070', '159928', '512760', '159825']  # 半导体, AI, 消费, 新能源, 农业
+    }
+}
+# 监控配置
+MONITOR_CONFIG = {
+    'enabled': True,  # 是否启用监控
+    'start_hour': 9,  # 监控开始时间 (9点)
+    'end_hour': 18,   # 监控结束时间 (17点)
+    'interval_hours': 6,  # 监控间隔 (6小时)
+    'alert_threshold': 3,  # 预警阈值 (评分绝对值大于等于3时发送预警)
+    'last_alert_sent': {}  # 记录上次预警时间
+}
 
-        /* ---------- CONTACT 页面样式 ---------- */
-        .contact-wrapper {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            flex-direction: column;
-            padding: 6rem 2rem;
-        }
-        .contact-box {
-            background: rgba(13, 17, 23, 0.95);
-            border: 2px solid #17f700;
-            padding: 4rem;
-            border-radius: 2rem;
-            width: 80%;
-            max-width: 700px;
-            box-shadow: 0 0 40px rgba(23, 247, 0, 0.4);
-            text-align: left;
-        }
-        .contact-item {
-            display: flex;
-            justify-content: space-between;
-            font-size: 1.6rem;
-            margin-bottom: 2rem;
-            border-bottom: 1px dashed #333;
-            padding-bottom: 1.2rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        .contact-item span:first-child { font-weight: bold; color: #fff; }
-        .contact-item span:last-child { color: #17f700; word-break: break-all; }
+# # 分析配置
+# ANALYSIS_CONFIG = {
+#     'start_date': '2023-01-01',  # 数据起始日期
+#     'end_date': datetime.datetime.now().strftime('%Y-%m-%d'),  # 默认为今天
+#     'ma_periods': [5, 10, 20, 60],  # 移动平均线周期
+#     'rsi_period': 14,  # RSI计算周期
+#     'arima_order': (1, 1, 1),  # ARIMA模型参数
+#     'forecast_days': 5,  # 预测天数
+#     'report_path': './etf_analysis_report',  # 报告保存路径
+#     'tushare_token': '3ca0354b0471d760b50d9ce0789249b6c7c4613c54916d6a280938ee',  # Tushare Token
+#     'news_keywords': ['A股', 'ETF', '黄金', '消费', '科技', '红利', '低波动', '沪深300', '人工智能', '半导体', '成长', '纳指', '农业', '资源'],
+#     'ml_models': ['random_forest', 'gradient_boosting', 'xgboost']  # 机器学习模型选择
+# }
+# 分析配置
+ANALYSIS_CONFIG = {
+    'start_date': '2023-01-01',
+    'end_date': datetime.datetime.now().strftime('%Y-%m-%d'),
+    'ma_periods': [5, 10, 20, 60],
+    'rsi_period': 14,
+    'arima_order': (1, 1, 1),
+    'forecast_days': 5,
+    'report_path': './etf_analysis_report',
+    'tushare_token': os.environ.get('TUSHARE_TOKEN', ''),  # 从环境变量读取
+    'news_keywords': ['A股', 'ETF', '黄金', '消费', '科技', '红利', '低波动', '沪深300', '人工智能', '半导体', '成长', '纳指', '农业', '资源'],
+    'ml_models': ['random_forest', 'gradient_boosting', 'xgboost']
+}
 
-        /* ---------- PROJECTS 时间轴样式 ---------- */
-        .timeline-container {
-            position: relative;
-            max-width: 1200px;
-            margin: 10vh auto;
-            padding: 5vh 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .timeline-line {
-            position: absolute;
-            left: 50%;
-            top: 0;
-            height: 100%;
-            width: 4px;
-            background: #333;
-            transform: translateX(-50%);
-            z-index: 0;
-        }
-        .timeline-line::after {
-            content: '';
-            position: absolute;
-            left: 50%;
-            top: 0;
-            width: 4px;
-            height: 100%;
-            transform: translateX(-50%);
-            background: linear-gradient(to bottom, transparent, #17f700 50%, transparent);
-            background-size: 4px 50px;
-        }
-        .timeline-item {
-            position: relative;
-            width: 100%;
-            margin: 80px 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1;
-        }
-        .timeline-circle {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            background: #0d1117;
-            border: 6px solid #17f700;
-            position: absolute;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            cursor: pointer;
-            transition: 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-            box-shadow: 0 0 15px rgba(23, 247, 0, 0.5);
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .timeline-item:hover .timeline-circle,
-        .timeline-item.active .timeline-circle {
-            width: 130px;
-            height: 130px;
-            border-color: #fff;
-            transform: translate(-50%, -50%) rotate(360deg);
-            box-shadow: 0 0 40px rgba(23, 247, 0, 0.8);
-        }
-        .timeline-time {
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            top: -90px;
-            font-size: 2rem;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 0 10px #17f700;
-            white-space: nowrap;
-        }
-        /* 左右交替年份位置 */
-        .timeline-item.left .timeline-time {
-            left: calc(50% - 200px);
-            transform: translateX(0);
-        }
-        .timeline-item.right .timeline-time {
-            left: calc(50% + 160px);
-            transform: translateX(0);
-        }
-        .timeline-content {
-            width: 450px;
-            background: rgba(13, 17, 23, 0.95);
-            border: 2px solid #17f700;
-            border-radius: 1rem;
-            padding: 2rem;
-            position: absolute;
-            top: -50px;
-            backdrop-filter: blur(10px);
-            opacity: 0;
-            transform: scale(0.5) translateY(100px);
-            pointer-events: none;
-            transition: 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-            box-shadow: 0 0 30px rgba(0,0,0,0.8);
-        }
-        .timeline-content h3 { font-size: 2rem; color: #fff; margin-bottom: 1rem; border-bottom: 2px solid #17f700; padding-bottom: 0.5rem; }
-        .timeline-content p { font-size: 1.2rem; line-height: 1.6; color: #ccc; margin-bottom: 1rem; }
-        .timeline-item.right .timeline-content { left: calc(50% + 100px); transform: scale(0.5) translateX(-100px); }
-        .timeline-item.left .timeline-content { right: calc(50% + 100px); transform: scale(0.5) translateX(100px); }
-        .timeline-item.active.right .timeline-content,
-        .timeline-item.active.left .timeline-content {
-            opacity: 1;
-            transform: scale(1) translateX(0);
-            pointer-events: auto;
-        }
-        .project-img {
-            width: 100%;
-            height: 180px;
-            background: #222;
-            border: 1px dashed #17f700;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1rem;
-            color: #17f700;
-            object-fit: cover;
-        }
+# # 邮件配置
+# EMAIL_CONFIG = {
+#     'smtp_server': 'smtp.qq.com',
+#     'smtp_port': 465,
+#     'use_ssl': True,
+#     'sender_email': 'chenvipblue@foxmail.com',
+#     'sender_password': 'srwjsgcwjfxidide',
+#     'receiver_emails': ['2431039560@qq.com'],  # 列表形式
+#     'sender_name': 'ycbot机器人系统',
+#     'receiver_name': 'BOSS_YC',
+#     'news_api_key': 'd8c6d4c75ba0'  # 新增API密钥
+# }
+# 邮件配置
+EMAIL_CONFIG = {
+    'smtp_server': 'smtp.qq.com',
+    'smtp_port': 465,
+    'use_ssl': True,
+    'sender_email': 'chenvipblue@foxmail.com',
+    'sender_password': os.environ.get('EMAIL_PASSWORD', ''),  # 从环境变量读取
+    'receiver_emails': ['2431039560@qq.com'],
+    'sender_name': 'ycbot机器人系统',
+    'receiver_name': 'BOSS_YC',
+    'news_api_key': os.environ.get('NEWS_API_KEY', '')
+}
 
-        /* ---------- RELAX 页面 a-waves 样式 ---------- */
-        .relax-full {
-            position: relative;
-            width: 100%;
-            height: 100vh;
-            overflow: hidden;
-            background: #0d1117;
-        }
-        a-waves {
-            --x: -0.5rem;
-            --y: 50%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-        }
-        a-waves:before {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 0.5rem;
-            height: 0.5rem;
-            background: #17f700;
-            border-radius: 50%;
-            transform: translate3d(calc(var(--x) - 50%), calc(var(--y) - 50%), 0);
-            will-change: transform;
-            content: "";
-        }
-        a-waves svg {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-        a-waves svg path {
-            fill: none;
-            stroke: #17f700;
-            stroke-width: 1px;
-        }
+# 定时任务配置
+SCHEDULE_CONFIG = {
+    'send_time': '09:30',  # 每日发送时间
+    'monitor_times': ['09:00', '12:00', '15:00']  # 监控时间点 (9,12点和15点)
+}
 
-        /* 响应式调整 */
-        @media (max-width: 800px) {
-            .timeline-time {
-                top: -110px;
-                font-size: 1.4rem;
-            }
-            .timeline-item.left .timeline-time {
-                left: calc(50% - 100px);
-            }
-            .timeline-item.right .timeline-time {
-                left: calc(50% + 100px);
-            }
-            .timeline-circle {
-                width: 80px;
-                height: 80px;
-            }
-            .timeline-content {
-                width: 260px;
-            }
-        }
-    </style>
-</head>
-<body>
+# ================
+# 工具函数
+# ================
 
-<div class="global-loading" id="globalLoading">
-    <svg viewBox='0 0 50 50'><circle r='25' cx='25' cy='25'></circle></svg>
-    <p>LOADING</p>
-</div>
-<div class="global-back hide" id="globalBackBtn">← BACK_TO_TERMINAL</div>
+def encode_rfc2047(s):
+    """将字符串按RFC2047标准编码为base64格式"""
+    return f"=?UTF-8?B?{base64.b64encode(s.encode('utf-8')).decode('ascii')}?="
 
-<!-- ========================= 页面1: MAIN ========================= -->
-<div id="page-main" class="page active">
-    <div class="bg-scroll-container">
-        <svg viewBox="0 0 300 50"><text class="bg-text" x="5" y="40">YANG CHEN</text></svg>
-    </div>
-    <div class="content-wrapper">
-        <div class="profile-section">
-            <img src="images/1.png" alt="YangChen" class="profile-img" onerror="this.src='https://via.placeholder.com/300x300/17f700/0d1117?text=Y.C'">
-            <h1 style="font-size: 5rem; margin-bottom: 2rem; color:#fff;">>> YANG CHEN</h1>
-            <p class="info-text"><span>职业：</span> 机器人研发工程师 / Terminal Hacker</p>
-            <p class="info-text"><span>特点：</span> 热爱炫酷交互，极简主义，头发还在</p>
-            <p class="info-text"><span>爱好：</span> 游戏开发，摄影，旅游、吃喝玩</p>
-        </div>
-        <div style="height: 20vh;"></div>
-        <h2 style="font-size: 3rem; margin-bottom: 5rem; z-index: 2; text-transform: uppercase;">_COMMAND_CENTER_</h2>
-        <div class="poker-section">
-            <div class="poker-container" id="pokerDeck">
-                <div class="poker" data-page="relax" style="background:#4A90E2;"><h2 style="color:#fff">解压时刻</h2></div>
-                <div class="poker" data-page="projects" style="background:#F5A623;"><h2 style="color:#0d1117">项目经历</h2></div>
-                <div class="poker" data-page="contact" style="background:#D0021B;"><h2 style="color:#fff">联系方式</h2></div>
-                <div class="poker" data-page="finance" style="background:#10b981;"><h2 style="color:#fff">量化投资</h2></div>
-                <div class="poker" data-page="game" style="background:#17f700;"><h2 style="color:#0d1117">个人游戏</h2></div>
-                <div class="poker_top" id="pokerTopClick"></div>
-            </div>
-            <button class="enter-btn" id="enterCommandBtn">执行指令 : 个人游戏</button>
-        </div>
-
-        <div class="message-section">
-            <h2 style="font-size: 3rem; margin-bottom: 3rem; text-transform: uppercase; color:#fff;">>> PUBLIC_FEEDBACK</h2>
-            <div class="message-form">
-                <h3>发表终端评论</h3>
-                <input type="text" id="msgName" placeholder="[您的标识符/昵称]">
-                <textarea id="msgContent" placeholder="[输入您的反馈指令...]"></textarea>
-                <button onclick="window.postMessageToBoard()">[ 提交 FEEDBACK ]</button>
-            </div>
-            <div id="floatingMessagesArea"></div>
-        </div>
-    </div>
-</div>
-
-<!-- ========================= 页面2: GAME ========================= -->
-<div id="page-game" class="page">
-    <div class="game-photos-container" id="gamePhotosContainer">
-        <div class="infinite-photos" id="gameInfiniteContainer">
-            <div class="photos_line">
-                <a href="game1.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game1.png" alt="Cyber Hacker"></div><h3 class="game-title">Cyber Hacker</h3><p class="game-sub">Unity 解谜 · 终端入侵</p></div><div class="back"><h3>Cyber Hacker</h3><p>在这个赛博朋克风格的解谜游戏中，你将扮演黑客入侵终端系统，解开层层谜题。支持多结局，沉浸式体验。</p><p class="click-tip">点击即可游玩 →</p></div></div></a>
-                <a href="game2.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game2.png" alt="Cyberpunk Quest"></div><h3 class="game-title">Cyberpunk Quest</h3><p class="game-sub">VR RPG / 开放世界</p></div><div class="back"><h3>Cyberpunk Quest</h3><p>开放世界RPG，探索未来都市，与AI互动，自由选择职业路线，体验沉浸式剧情。</p><p class="click-tip">点击即可游玩 →</p></div></div></a>
-                <a href="game3.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game3.png" alt="Unreal Shooter"></div><h3 class="game-title">Unreal Shooter</h3><p class="game-sub">高画质FPS · 赛博对战</p></div><div class="back"><h3>Unreal Shooter</h3><p>快节奏第一人称射击游戏，支持多人联机，多种武器与技能组合，极致画面表现。</p><p class="click-tip">点击即可游玩 →</p></div></div></a>
-                <a href="game4.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game4.png" alt="Mobile Puzzle"></div><h3 class="game-title">Mobile Puzzle</h3><p class="game-sub">休闲益智 · 碎片时间</p></div><div class="back"><h3>Mobile Puzzle</h3><p>轻松有趣的益智解谜，适合碎片时间，关卡丰富，锻炼大脑。</p><p class="click-tip">点击即可游玩 →</p></div></div></a>
-            </div>
-            <div class="photos_line">
-                <a href="game5.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game5.png" alt="Neon Drift"></div><h3 class="game-title">Neon Drift</h3><p class="game-sub">竞速狂飙 · 光污染美学</p></div><div class="back"><h3>Neon Drift</h3><p>赛博朋克风格竞速游戏，霓虹灯赛道，极速漂移，支持改装车辆。</p><p class="click-tip">点击即可游玩 →</p></div></div></a>
-                <a href="game6.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game6.png" alt="Retro Platformer"></div><h3 class="game-title">Retro Platformer</h3><p class="game-sub">独立像素 · 硬核跳跃</p></div><div class="back"><h3>Retro Platformer</h3><p>复古像素风平台跳跃，高难度挑战，隐藏关卡，致敬经典。</p><p class="click-tip">点击即可游玩 →</p></div></div></a>
-                <a href="game7.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game7.png" alt="Matrix Breaker"></div><h3 class="game-title">Matrix Breaker</h3><p class="game-sub">打砖块 · 赛博朋克</p></div><div class="back"><h3>Matrix Breaker</h3><p>经典打砖块玩法，加入矩阵特效，技能系统，爽快打击感。</p><p class="click-tip">点击即可游玩 →</p></div></div></a>
-                <a href="game8.html" class="photo-item"><div class="inner"><div class="front"><div class="front-img"><img src="images/game8.png" alt="Matrix Breaker"></div><h3 class="game-title">Matrix Breaker</h3><p class="game-sub">打砖块 · 赛博朋克</p></div><div class="back"><h3>Matrix Breaker</h3></div></div></a>
-            </div>
-        </div>
-    </div>
-    <div class="game-iframe-container" id="gameIframeContainer">
-        <!-- 添加 tabindex="0" 使 iframe 可以获得焦点 -->
-        <iframe id="gameFrame" src="about:blank" allowfullscreen sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-pointer-lock" tabindex="0"></iframe>
-        <button class="back-to-gallery" id="backToGalleryBtn">← 返回游戏库</button>
-    </div>
-</div>
-
-<!-- ========================= 页面3: CONTACT ========================= -->
-<div id="page-contact" class="page">
-    <div class="contact-wrapper">
-        <h1 style="font-size: 4rem; margin-bottom: 3rem; color:#fff; text-shadow: 0 0 20px #17f700;">//secure_connection</h1>
-        <div class="contact-box">
-            <div class="contact-item"><span>QQ Identifier:</span> <span>[2431039560]</span></div>
-            <div class="contact-item"><span>WeChat:</span> <span>[I_deserve_1t]</span></div>
-            <div class="contact-item"><span>Bilibili Channel:</span> <span>[便终身无个进步]</span></div>
-            <div class="contact-item"><span>Phone/SMS:</span> <span>[18213577341]</span></div>
-            <div class="contact-item" style="border:none;"><span>Email Address:</span> <span>chenvipblue@foxmail.com</span></div>
-        </div>
+def fetch_index_data_akshare(index_code, market, start_date, end_date):
+    """
+    使用AKShare获取ETF基金数据
+    :param index_code: ETF代码
+    :param market: 市场（'sh'或'sz'）
+    :param start_date: 开始日期
+    :param end_date: 结束日期
+    :return: 数据DataFrame或None
+    """
+    print(f"正在获取 ETF {index_code} 数据 ({start_date} 至 {end_date})...")
+    try:
+        # 使用AKShare获取ETF历史数据 (注意：这里不需要添加市场后缀)
+        df = ak.fund_etf_hist_em(symbol=index_code, period="daily", 
+                                start_date=start_date.replace('-', ''), 
+                                end_date=end_date.replace('-', ''), 
+                                adjust="")
         
-        <!-- 留言表单 -->
-        <div class="message-form" style="margin-top: 3rem;">
-            <h2 style="color:#fff; font-size: 2rem; margin-bottom: 2rem;">//leave_message</h2>
-            <form id="messageForm">
-                <div style="margin-bottom: 1rem;">
-                    <input type="text" id="msgName" placeholder="您的名字" required style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <input type="text" id="msgNickname" placeholder="昵称（可选）" style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <textarea id="msgContent" placeholder="留言内容" required style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px; min-height: 100px; resize: vertical;"></textarea>
-                </div>
-                <button type="submit" style="background: #17f700; color: #0d1117; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: bold;">发送留言</button>
-            </form>
-            <div id="messageStatus" style="margin-top: 1rem; color: #17f700;"></div>
-        </div>
-
-        <!-- 基金邮件订阅/收发 -->
-        <div class="message-form" style="margin-top: 3rem;">
-            <h2 style="color:#fff; font-size: 2rem; margin-bottom: 2rem;">//send_etf_report</h2>
-            <form id="fundReportForm">
-                <div style="margin-bottom: 1rem;">
-                    <input type="email" id="fundEmail" placeholder="目标邮箱 (例如：example@foxmail.com)" required style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <input type="text" id="fundCode" placeholder="基金/ETF 代码（可选）" style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <textarea id="fundMessage" placeholder="补充说明（可选）" style="width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #17f700; color: #17f700; border-radius: 4px; min-height: 100px; resize: vertical;"></textarea>
-                </div>
-                <button type="submit" style="background: #17f700; color: #0d1117; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: bold;">发送ETF分析报告</button>
-            </form>
-            <div id="fundReportStatus" style="margin-top: 1rem; color: #17f700;"></div>
-        </div>
+        if df.empty:
+            print(f"⚠️ ETF {index_code} 返回空数据")
+            return None
         
-        <!-- 显示留言 -->
-        <div class="messages-list" style="margin-top: 3rem;">
-            <h2 style="color:#fff; font-size: 2rem; margin-bottom: 2rem;">//messages</h2>
-            <div id="messagesContainer"></div>
-        </div>
-    </div>
-</div>
-
-<!-- ========================= 页面4: PROJECTS ========================= -->
-<div id="page-projects" class="page">
-    <h1 style="text-align:center; font-size:5rem; color:#fff; padding-top:8vh;">temporal_logs</h1>
-    <div class="timeline-container" id="timelineRoot">
-        <div class="timeline-line"></div>
-        <!-- 时间轴节点将由 JS 动态生成 -->
-    </div>
-</div>
-
-<!-- ========================= 页面5: RELAX ========================= -->
-<div id="page-relax" class="page">
-    <div class="relax-full">
-        <a-waves><svg class="js-svg"></svg></a-waves>
-    </div>
-</div>
-
-<!-- ========================= 页面6: FINANCE ========================= -->
-<div id="page-finance" class="page">
-    <iframe src="Investment and Finance Management & Money Planning.html" style="width:100%; height:100vh; border:none;"></iframe>
-</div>
-
-<script>
-    // ---------- 全局路由 & 单页切换核心 ----------
-    const pages = {
-        main: document.getElementById('page-main'),
-        game: document.getElementById('page-game'),
-        contact: document.getElementById('page-contact'),
-        projects: document.getElementById('page-projects'),
-        relax: document.getElementById('page-relax'),
-        finance: document.getElementById('page-finance')
-    };
-    let currentPage = 'main';
-    let globalLenis = null;
-
-    // Loading 效果对象
-    const loading = {
-        container: document.getElementById('globalLoading'),
-        out() { this.container.classList.add('loading_out'); }
-    };
-
-    // 显示loading并切换页面
-    function switchToPage(pageId, showLoadingEffect = true) {
-        if (currentPage === pageId) return;
-        const doSwitch = () => {
-            Object.keys(pages).forEach(id => {
-                pages[id].classList.remove('active');
-            });
-            pages[pageId].classList.add('active');
-            currentPage = pageId;
-            document.getElementById('globalBackBtn').classList.toggle('hide', pageId === 'main');
-            // 页面特定重绘/初始化
-            if (pageId === 'game') {
-                reinitGamePage();
-                const photosContainer = document.getElementById('gamePhotosContainer');
-                const iframeContainer = document.getElementById('gameIframeContainer');
-                if (photosContainer && iframeContainer) {
-                    photosContainer.style.display = 'block';
-                    iframeContainer.style.display = 'none';
-                }
-                // 恢复父页面按钮显示
-                const globalBack = document.getElementById('globalBackBtn');
-                const backToGalleryBtn = document.getElementById('backToGalleryBtn');
-                if (globalBack) globalBack.classList.remove('hide');
-                if (backToGalleryBtn) backToGalleryBtn.style.display = 'flex';
-            }
-            if (pageId === 'projects') reinitProjectsToggle();
-            if (pageId === 'relax') initRelaxPage();
-            if (globalLenis) globalLenis.scrollTo(0, { duration: 0 });
-            else window.scrollTo(0, 0);
-            if (globalLenis) setTimeout(() => globalLenis.resize(), 200);
-        };
-        if (showLoadingEffect) {
-            loading.container.classList.remove('loading_out');
-            setTimeout(() => {
-                doSwitch();
-                loading.container.classList.add('loading_out');
-            }, 1000);
-        } else {
-            doSwitch();
+        # 修复列名
+        column_mapping = {
+            '日期': 'date',
+            '开盘': 'Open',
+            '收盘': 'Close',
+            '最高': 'High',
+            '最低': 'Low',
+            '成交量': 'Volume'
         }
-    }
-
-    function goBackHome() { switchToPage('main'); }
-
-    // ---------- GAME 页面无限滚动逻辑 ----------
-    let gamePhotobox = null;
-    function reinitGamePage() {
-        const container = document.querySelector('#page-game .infinite-photos');
-        if (!container) return;
-        if (gamePhotobox) window.removeEventListener('resize', gamePhotobox.resizeHandler);
-        const photoItems = [...container.querySelectorAll('.photo-item')];
-        if (photoItems.length === 0) return;
-        let containerWidth = container.offsetWidth;
-        let containerHeight = container.offsetHeight;
-        let photoWidth = photoItems[0].offsetWidth;
-        let photoHeight = photoItems[0].offsetHeight;
-        let scaleNums = document.body.offsetWidth / 1440;
-        let imgData = [];
-        let ifMovable = false, mouseX = 0, mouseY = 0;
-
-        function resizeHandler() {
-            containerWidth = container.offsetWidth;
-            containerHeight = container.offsetHeight;
-            if (photoItems[0]) photoWidth = photoItems[0].offsetWidth;
-            if (photoItems[0]) photoHeight = photoItems[0].offsetHeight;
-            scaleNums = document.body.offsetWidth / 1440;
-            container.style.transform = `scale(${scaleNums})`;
-            imgData = photoItems.map(img => ({
-                node: img, x: img.offsetLeft, y: img.offsetTop, mov_x: 0, mov_y: 0, ani: null
-            }));
-        }
-        function moveHandler(clientX, clientY) {
-            if (!ifMovable) return;
-            let distanceX = (clientX - mouseX) / scaleNums;
-            let distanceY = (clientY - mouseY) / scaleNums;
-            imgData.forEach(img => {
-                let duration = 1;
-                img.mov_x += distanceX; img.mov_y += distanceY;
-                if (img.x + img.mov_x > containerWidth) { img.mov_x -= containerWidth; duration = 0; }
-                if (img.x + img.mov_x < -photoWidth) { img.mov_x += containerWidth; duration = 0; }
-                if (img.y + img.mov_y > containerHeight) { img.mov_y -= containerHeight; duration = 0; }
-                if (img.y + img.mov_y < -photoHeight) { img.mov_y += containerHeight; duration = 0; }
-                if (img.ani) img.ani.kill();
-                img.ani = gsap.to(img.node, { x: img.mov_x, y: img.mov_y, duration: duration, ease: 'power4.out' });
-            });
-            mouseX = clientX; mouseY = clientY;
-        }
-        function onMouseDown(e) { ifMovable = true; mouseX = e.clientX; mouseY = e.clientY; }
-        function onMouseUp() { ifMovable = false; }
-        function onMouseMove(e) { moveHandler(e.clientX, e.clientY); }
-        function onTouchStart(e) { ifMovable = true; mouseX = e.touches[0].clientX; mouseY = e.touches[0].clientY; }
-        function onTouchMove(e) { moveHandler(e.touches[0].clientX, e.touches[0].clientY); }
-        function init() {
-            resizeHandler();
-            window.addEventListener('resize', resizeHandler);
-            container.addEventListener('mousedown', onMouseDown);
-            window.addEventListener('mouseup', onMouseUp);
-            window.addEventListener('mousemove', onMouseMove);
-            container.addEventListener('touchstart', onTouchStart);
-            window.addEventListener('touchmove', onTouchMove);
-            window.addEventListener('touchend', onMouseUp);
-        }
-        function destroy() {
-            window.removeEventListener('resize', resizeHandler);
-            container.removeEventListener('mousedown', onMouseDown);
-            window.removeEventListener('mouseup', onMouseUp);
-            window.removeEventListener('mousemove', onMouseMove);
-            container.removeEventListener('touchstart', onTouchStart);
-            window.removeEventListener('touchmove', onTouchMove);
-            window.removeEventListener('touchend', onMouseUp);
-        }
-        if (gamePhotobox && gamePhotobox.destroy) gamePhotobox.destroy();
-        init();
-        gamePhotobox = { destroy, resizeHandler };
-    }
-
-    // ---------- 游戏嵌入（添加聚焦） ----------
-    function startGame(gameUrl) {
-        const iframe = document.getElementById('gameFrame');
-        iframe.src = gameUrl;
-        const photosContainer = document.getElementById('gamePhotosContainer');
-        const iframeContainer = document.getElementById('gameIframeContainer');
-        photosContainer.style.display = 'none';
-        iframeContainer.style.display = 'block';
-        // 隐藏父页面按钮
-        const globalBack = document.getElementById('globalBackBtn');
-        const backToGalleryBtn = document.getElementById('backToGalleryBtn');
-        if (globalBack) globalBack.classList.add('hide');
-        if (backToGalleryBtn) backToGalleryBtn.style.display = 'none';
-        // 等待 iframe 加载完成，并尝试聚焦
-        iframe.onload = () => {
-            try {
-                iframe.contentWindow.focus();
-            } catch(e) { console.warn('无法聚焦 iframe', e); }
-        };
-    }
-
-    // 返回游戏库（全局函数，供 iframe 内调用）
-    window.backToGallery = function() {
-        const photosContainer = document.getElementById('gamePhotosContainer');
-        const iframeContainer = document.getElementById('gameIframeContainer');
-        if (photosContainer && iframeContainer) {
-            photosContainer.style.display = 'block';
-            iframeContainer.style.display = 'none';
-        }
-        // 恢复父页面按钮显示
-        const globalBack = document.getElementById('globalBackBtn');
-        const backToGalleryBtn = document.getElementById('backToGalleryBtn');
-        if (globalBack && currentPage !== 'main') {
-            globalBack.classList.remove('hide');
-        }
-        if (backToGalleryBtn) backToGalleryBtn.style.display = 'flex';
-        // 重新初始化照片墙（避免滚动位置错乱）
-        if (typeof reinitGamePage === 'function') reinitGamePage();
-    };
-
-    function bindGameCardClicks() {
-        const cards = document.querySelectorAll('#page-game .photo-item');
-        cards.forEach(card => {
-            card.addEventListener('click', (e) => {
-                e.preventDefault();
-                const gameUrl = card.getAttribute('href');
-                if (gameUrl) startGame(gameUrl);
-            });
-        });
-    }
-
-    // ---------- PROJECTS 时间轴激活切换 ----------
-    function reinitProjectsToggle() {
-        const items = document.querySelectorAll('#page-projects .timeline-item');
-        items.forEach(item => {
-            item.onclick = (e) => {
-                e.stopPropagation();
-                item.classList.toggle('active');
-                if (globalLenis) setTimeout(() => globalLenis.resize(), 300);
-            };
-        });
-    }
-
-    // 构建时间轴节点
-    function buildTimeline() {
-        const container = document.getElementById('timelineRoot');
-        if (!container) return;
-        container.innerHTML = '<div class="timeline-line"></div>';
-
-        const timelineData = [
-            { year: "2003.5", desc: "出生 · 人生启程", img: null },
-            { year: "2009.6", desc: "幼儿园毕业 · 初识世界", img: null },
-            { year: "2015.6", desc: "小学毕业 · 懵懂少年", img: null },
-            { year: "2015.9", desc: "初中入学 · 新的征程", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "2018.6", desc: "初中毕业 · 青春成长", img: null },
-            { year: "2018.9", desc: "高中入学 · 冲刺梦想", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "2020", desc: "法国之旅 · 异国文化体验", img: null },
-            { year: "2020", desc: "疫情爆发 · 回国居家", img: null },
-            { year: "2021.6", desc: "高中毕业 · 成年礼", img: null },
-            { year: "2021.9", desc: "大学入学 · 专业探索", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "", desc: "—— 空白节点 ——", img: null },
-            { year: "2025.6", desc: "大学本科毕业 · 学位授予", img: null },
-            { year: "2026.1至今", desc: "探索与工作 · 新阶段", img: null }
-        ];
-
-        // 第一个节点添加图片
-        if (timelineData[0]) timelineData[0].img = "images/ych.jpg";
-
-        timelineData.forEach((item, index) => {
-            const side = (index % 2 === 0) ? 'left' : 'right';
-            const timelineItem = document.createElement('div');
-            timelineItem.className = `timeline-item ${side}`;
-            timelineItem.setAttribute('data-proj', '');
-
-            const timeSpan = document.createElement('p');
-            timeSpan.className = 'timeline-time';
-            timeSpan.textContent = item.year || '—';
-            timelineItem.appendChild(timeSpan);
-
-            const circleDiv = document.createElement('div');
-            circleDiv.className = 'timeline-circle';
-            if (item.img) {
-                const img = document.createElement('img');
-                img.src = item.img;
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.objectFit = 'cover';
-                circleDiv.appendChild(img);
-            } else {
-                const placeholder = document.createElement('span');
-                placeholder.textContent = item.year ? item.year.slice(0,4) : '●';
-                placeholder.style.fontSize = '1.2rem';
-                placeholder.style.color = '#17f700';
-                circleDiv.appendChild(placeholder);
-            }
-            timelineItem.appendChild(circleDiv);
-
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'timeline-content';
-            contentDiv.innerHTML = `<h3>${item.year || '事件'}</h3><p>${item.desc}</p>`;
-            timelineItem.appendChild(contentDiv);
-
-            container.appendChild(timelineItem);
-        });
-
-        reinitProjectsToggle();
-    }
-
-    // ---------- RELAX 页面初始化 ----------
-    let relaxWaves = null;
-    function initRelaxPage() {
-        const relaxContainer = document.querySelector('#page-relax .relax-full');
-        if (!relaxContainer) return;
-        const oldWaves = relaxContainer.querySelector('a-waves');
-        if (oldWaves) oldWaves.remove();
-        const newWaves = document.createElement('a-waves');
-        newWaves.innerHTML = '<svg class="js-svg"></svg>';
-        relaxContainer.appendChild(newWaves);
-        relaxWaves = newWaves;
-        setTimeout(() => {
-            if (newWaves.setSize && newWaves.setLines) {
-                newWaves.setSize();
-                newWaves.setLines();
-            }
-        }, 100);
-    }
-
-    // ---------- 漂浮留言板 ----------
-    // 保存留言到本地存储
-    function saveMessagesToStorage(messages) {
-        localStorage.setItem('floatingMessages', JSON.stringify(messages));
-    }
-
-    // 从本地存储加载留言
-    function loadMessagesFromStorage() {
-        const stored = localStorage.getItem('floatingMessages');
-        return stored ? JSON.parse(stored) : [];
-    }
-
-    window.postMessageToBoard = function() {
-        const area = document.getElementById('floatingMessagesArea');
-        const name = document.getElementById('msgName').value || "ANONYMOUS";
-        const content = document.getElementById('msgContent').value;
-        if(!content) return alert("请输入反馈指令！");
-        const newMsg = document.createElement('div');
-        newMsg.className = 'floating-message';
-        newMsg.style.left = Math.random() * (area.offsetWidth - 200) + 'px';
-        newMsg.style.top = Math.random() * (area.offsetHeight - 50) + 'px';
-        newMsg.innerHTML = `<span>@${name}:</span> ${content}`;
-        area.appendChild(newMsg);
-        let vx = (Math.random() - 0.5) * 1.5, vy = (Math.random() - 0.5) * 1.5;
-        let posX = parseFloat(newMsg.style.left), posY = parseFloat(newMsg.style.top);
-
-        // 保存留言数据到 localStorage
-        const messages = loadMessagesFromStorage();
-        messages.push({
-            name: name,
-            content: content,
-            left: newMsg.style.left,
-            top: newMsg.style.top,
-            vx: vx,
-            vy: vy
-        });
-        saveMessagesToStorage(messages);
-
-        function floatMove() {
-            if (!newMsg.isConnected) return;
-            posX += vx; posY += vy;
-            const maxX = area.offsetWidth - newMsg.offsetWidth;
-            const maxY = area.offsetHeight - newMsg.offsetHeight;
-            if (posX < 0) { posX = 0; vx *= -1; }
-            if (posX > maxX) { posX = maxX; vx *= -1; }
-            if (posY < 0) { posY = 0; vy *= -1; }
-            if (posY > maxY) { posY = maxY; vy *= -1; }
-            newMsg.style.left = posX + 'px';
-            newMsg.style.top = posY + 'px';
-            requestAnimationFrame(floatMove);
-        }
-        floatMove();
-        document.getElementById('msgContent').value = '';
-    };
-    function initMainMessages() {
-        const area = document.getElementById('floatingMessagesArea');
-        if(area.children.length === 0){
-            const demo = ['@N00b: 此网站特效过于炫酷，我的显卡在嚎叫。','@MatrixAdmin: YangChen, 你的代码风格我很喜欢。','@AI_Hacker: 整合单页版太强了！'];
-            demo.forEach((txt,i)=>{
-                const msg = document.createElement('div'); msg.className = 'floating-message';
-                msg.style.left = 10 + i*15 + '%'; msg.style.top = 20 + i*20 + '%';
-                msg.innerHTML = `<span>${txt.split(':')[0]}</span>:${txt.split(':')[1]}`;
-                area.appendChild(msg);
-                let vx = (Math.random() - 0.5)*1.2, vy=(Math.random()-0.5)*1.2;
-                let px=parseFloat(msg.style.left), py=parseFloat(msg.style.top);
-                function animateMsg(){
-                    if(!msg.isConnected) return;
-                    px+=vx; py+=vy;
-                    if(px<0||px+msg.offsetWidth>area.offsetWidth) vx*=-1;
-                    if(py<0||py+msg.offsetHeight>area.offsetHeight) vy*=-1;
-                    msg.style.left=px+'px'; msg.style.top=py+'px';
-                    requestAnimationFrame(animateMsg);
-                }
-                animateMsg();
-            });
-        }
-    }
-
-    // ---------- 扑克导航 (平滑旋转 + 按钮颜色同步) ----------
-    const pokerDeck = document.getElementById('pokerDeck');
-    let pokers = [...pokerDeck.querySelectorAll('.poker:not(.poker_top)')];
-    const transforms = [
-        "rotate(-10deg) translate(0%, 0%)",
-        "rotate(-6deg) translate(35%, -12%)",
-        "rotate(-2deg) translate(65%, -19%)",
-        "rotate(2deg) translate(95%, -26%)"
-    ];
-
-    function updatePokerUI() {
-        const bottomCard = pokers.pop();
-        pokers.unshift(bottomCard);
-        pokerDeck.insertBefore(bottomCard, pokers[1]);
-        pokers.forEach((card, idx) => {
-            card.style.zIndex = pokers.length - idx - 1;
-            card.style.transform = transforms[idx];
-        });
-        const topCard = pokers[0];
-        const pageName = topCard.querySelector('h2').innerText;
-        const bgColor = window.getComputedStyle(topCard).backgroundColor;
-        const enterBtn = document.getElementById('enterCommandBtn');
-        enterBtn.innerText = `执行指令 : ${pageName}`;
-        enterBtn.style.backgroundColor = bgColor;
-        return topCard.getAttribute('data-page');
-    }
-
-    function cyclePoker() { updatePokerUI(); }
-    function executePoker() {
-        const topCard = pokers[0];
-        const pageId = topCard.getAttribute('data-page');
-        if (pageId) switchToPage(pageId);
-    }
-
-    document.getElementById('pokerTopClick')?.addEventListener('click', cyclePoker);
-    document.getElementById('enterCommandBtn')?.addEventListener('click', executePoker);
-    document.getElementById('globalBackBtn')?.addEventListener('click', goBackHome);
-    document.getElementById('backToGalleryBtn')?.addEventListener('click', window.backToGallery);
-
-    updatePokerUI();
-
-    // 全局Lenis平滑滚动
-    globalLenis = new Lenis({ duration: 1.2, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)) });
-    function raf(time) { globalLenis.raf(time); requestAnimationFrame(raf); }
-    requestAnimationFrame(raf);
-
-    // 背景文字描边随滚动变化
-    window.addEventListener('scroll', () => {
-        const bgText = document.querySelector('.bg-text');
-        if (bgText && currentPage === 'main') {
-            const scrollTop = window.scrollY;
-            const maxScroll = document.body.scrollHeight - window.innerHeight;
-            const ratio = maxScroll > 0 ? Math.min(scrollTop / maxScroll, 1) : 0;
-            bgText.style.strokeDashoffset = `${150 - (ratio * 150)}px`;
-        }
-    });
-
-    // 启动
-    window.addEventListener('load', () => {
-        loading.out();
-        initMainMessages();
-        buildTimeline();
-        initRelaxPage();
-        bindGameCardClicks();
-        setTimeout(() => { if(globalLenis) globalLenis.resize(); }, 200);
-        if (window.location.hash === '#game') switchToPage('game');
-    });
-    setTimeout(() => loading.out(), 1500);
-</script>
-
-<script>
-    // 自定义波浪元素（完整保留）
-    class Noise {
-      constructor(r) { this.r = r; this.p = new Uint8Array(512); this.permutation(); }
-      permutation() {
-        const permutation = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152, 2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253, 19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242, 193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214, 31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
-        for (let i = 0; i < 512; i++) this.p[i] = permutation[i % 256];
-      }
-      dot(g, x, y) { return g[0]*x + g[1]*y; }
-      noise(x, y) {
-        const X = Math.floor(x) & 255
-        const Y = Math.floor(y) & 255
-        x -= Math.floor(x)
-        y -= Math.floor(y)
-        const u = this.fade(x), v = this.fade(y)
-        const A = this.p[X]+Y, AA = this.p[A], AB = this.p[A+1]
-        const B = this.p[X+1]+Y, BA = this.p[B], BB = this.p[B+1]
-        return this.lerp(v, this.lerp(u, this.grad(this.p[AA], x, y), this.grad(this.p[BA], x-1, y)),
-                         this.lerp(u, this.grad(this.p[AB], x, y-1), this.grad(this.p[BB], x-1, y-1)))
-      }
-      perlin2(x, y) { return this.noise(x*2, y*2); }
-      fade(t) { return t*t*t*(t*(t*6-15)+10); }
-      lerp(t, a, b) { return a + t*(b-a); }
-      grad(hash, x, y) { const h = hash & 3; return [(h&1)?x:-x, (h&2)?y:-y][0]; }
-    }
-
-    class AWaves extends HTMLElement {
-      connectedCallback() {
-        this.svg = this.querySelector('.js-svg')
-        this.mouse = { x: -10, y: 0, lx: 0, ly: 0, sx: 0, sy: 0, v: 0, vs: 0, a: 0, set: false }
-        this.lines = []
-        this.paths = []
-        this.noise = new Noise(Math.random())
-        this.setSize()
-        this.setLines()
-        this.bindEvents()
-        requestAnimationFrame(this.tick.bind(this))
-      }
-      bindEvents() {
-        window.addEventListener('resize', this.onResize.bind(this))
-        window.addEventListener('mousemove', this.onMouseMove.bind(this))
-        this.addEventListener('touchmove', this.onTouchMove.bind(this))
-      }
-      onResize() { this.setSize(); this.setLines(); }
-      onMouseMove(e) { this.updateMousePosition(e.pageX, e.pageY) }
-      onTouchMove(e) { e.preventDefault(); const touch = e.touches[0]; this.updateMousePosition(touch.clientX, touch.clientY) }
-      updateMousePosition(x, y) {
-        const { mouse } = this
-        mouse.x = x - this.bounding.left
-        mouse.y = y - this.bounding.top + window.scrollY
-        if (!mouse.set) {
-          mouse.sx = mouse.x; mouse.sy = mouse.y
-          mouse.lx = mouse.x; mouse.ly = mouse.y
-          mouse.set = true
-        }
-      }
-      setSize() {
-        this.bounding = this.getBoundingClientRect()
-        this.svg.style.width = `${this.bounding.width}px`
-        this.svg.style.height = `${this.bounding.height}px`
-      }
-      setLines() {
-        const { width, height } = this.bounding
-        this.lines = []
-        this.paths.forEach((path) => path.remove())
-        this.paths = []
-        const xGap = 10
-        const yGap = 32
-        const oWidth = width + 200
-        const oHeight = height + 30
-        const totalLines = Math.ceil(oWidth / xGap)
-        const totalPoints = Math.ceil(oHeight / yGap)
-        const xStart = (width - xGap * totalLines) / 2
-        const yStart = (height - yGap * totalPoints) / 2
-        for (let i = 0; i <= totalLines; i++) {
-          const points = []
-          for (let j = 0; j <= totalPoints; j++) {
-            points.push({ x: xStart + xGap * i, y: yStart + yGap * j, wave: { x: 0, y: 0 }, cursor: { x: 0, y: 0, vx: 0, vy: 0 } })
-          }
-          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-          path.classList.add('a__line', 'js-line')
-          this.svg.appendChild(path)
-          this.paths.push(path)
-          this.lines.push(points)
-        }
-      }
-      movePoints(time) {
-        const { lines, mouse, noise } = this
-        lines.forEach((points) => {
-          points.forEach((p) => {
-            const move = noise.perlin2((p.x + time * 0.0125) * 0.002, (p.y + time * 0.005) * 0.0015) * 12
-            p.wave.x = Math.cos(move) * 32
-            p.wave.y = Math.sin(move) * 16
-            const dx = p.x - mouse.sx
-            const dy = p.y - mouse.sy
-            const d = Math.hypot(dx, dy)
-            const l = Math.max(175, mouse.vs)
-            if (d < l) {
-              const s = 1 - d / l
-              const f = Math.cos(d * 0.001) * s
-              p.cursor.vx += Math.cos(mouse.a) * f * l * mouse.vs * 0.00065
-              p.cursor.vy += Math.sin(mouse.a) * f * l * mouse.vs * 0.00065
-            }
-            p.cursor.vx += (0 - p.cursor.x) * 0.005
-            p.cursor.vy += (0 - p.cursor.y) * 0.005
-            p.cursor.vx *= 0.925
-            p.cursor.vy *= 0.925
-            p.cursor.x += p.cursor.vx * 2
-            p.cursor.y += p.cursor.vy * 2
-            p.cursor.x = Math.min(100, Math.max(-100, p.cursor.x))
-            p.cursor.y = Math.min(100, Math.max(-100, p.cursor.y))
-          })
-        })
-      }
-      moved(point, withCursorForce = true) {
-        const coords = {
-          x: point.x + point.wave.x + (withCursorForce ? point.cursor.x : 0),
-          y: point.y + point.wave.y + (withCursorForce ? point.cursor.y : 0),
-        }
-        coords.x = Math.round(coords.x * 10) / 10
-        coords.y = Math.round(coords.y * 10) / 10
-        return coords
-      }
-      drawLines() {
-        const { lines, moved, paths } = this
-        lines.forEach((points, lIndex) => {
-          let p1 = moved(points[0], false)
-          let d = `M ${p1.x} ${p1.y}`
-          points.forEach((p, pIndex) => {
-            if (pIndex === 0) return;
-            const isLast = pIndex === points.length - 1
-            const pMoved = moved(p, !isLast)
-            d += `L ${pMoved.x} ${pMoved.y}`
-          })
-          paths[lIndex].setAttribute('d', d)
-        })
-      }
-      tick(time) {
-        const { mouse } = this
-        mouse.sx += (mouse.x - mouse.sx) * 0.1
-        mouse.sy += (mouse.y - mouse.sy) * 0.1
-        const dx = mouse.x - mouse.lx
-        const dy = mouse.y - mouse.ly
-        const d = Math.hypot(dx, dy)
-        mouse.v = d
-        mouse.vs += (d - mouse.vs) * 0.1
-        mouse.vs = Math.min(100, mouse.vs)
-        mouse.lx = mouse.x
-        mouse.ly = mouse.y
-        mouse.a = Math.atan2(dy, dx)
-        this.style.setProperty('--x', `${mouse.sx}px`)
-        this.style.setProperty('--y', `${mouse.sy}px`)
-        this.movePoints(time)
-        this.drawLines()
-        requestAnimationFrame(this.tick.bind(this))
-      }
-    }
-    customElements.define('a-waves', AWaves)
-
-    // 留言功能
-    document.addEventListener('DOMContentLoaded', function() {
-        loadMessages();
         
-        const messageForm = document.getElementById('messageForm');
-        if (messageForm) {
-            messageForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                submitMessage();
-            });
-        }
-    });
-
-    async function submitMessage() {
-        const name = document.getElementById('msgName').value;
-        const nickname = document.getElementById('msgNickname').value;
-        const message = document.getElementById('msgContent').value;
+        # 检查并重命名列
+        existing_columns = [col for col in column_mapping.keys() if col in df.columns]
+        rename_dict = {col: column_mapping[col] for col in existing_columns}
+        df = df.rename(columns=rename_dict)
         
-        try {
-            const response = await fetch('/api/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ name, nickname, message }),
-            });
+        # 确保有'date'列
+        if 'date' not in df.columns:
+            # 尝试从索引获取
+            if df.index.name == 'date' or df.index.name == '日期':
+                df = df.reset_index()
+            else:
+                print(f"❌ ETF {index_code} 数据结构异常，缺少日期列")
+                return None
+        
+        # 转换日期格式
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        
+        # 只保留需要的日期范围
+        df = df[(df.index >= start_date) & (df.index <= end_date)]
+        
+        print(f"✅ 成功获取 {len(df)} 条 ETF {index_code} 数据")
+        return df
+    except Exception as e:
+        import traceback
+        print(f"❌ 获取 ETF {index_code} 数据时出错: {str(e)}")
+        print(f"详细的错误信息:{traceback.format_exc()}")
+        return None
+
+def clean_data(df):
+    """清洗数据：填充缺失值，删除无关列"""
+    if df is None or df.empty:
+        return None
+    
+    # 填充缺失值
+    df_cleaned = df.copy()
+    df_cleaned.ffill(inplace=True)
+    
+    return df_cleaned
+
+def calculate_indicators(df):
+    """计算技术指标"""
+    if df is None or df.empty:
+        return None
+    
+    df_indicators = df.copy()
+    
+    # 计算移动平均线
+    for period in ANALYSIS_CONFIG['ma_periods']:
+        df_indicators[f'SMA_{period}'] = df_indicators['Close'].rolling(window=period).mean()
+    
+    # 计算布林带
+    df_indicators['MA_20'] = df_indicators['Close'].rolling(window=20).mean()
+    df_indicators['STD_20'] = df_indicators['Close'].rolling(window=20).std()
+    df_indicators['Upper_Band'] = df_indicators['MA_20'] + (df_indicators['STD_20'] * 2)
+    df_indicators['Lower_Band'] = df_indicators['MA_20'] - (df_indicators['STD_20'] * 2)
+    
+    # 计算日收益率
+    df_indicators['Daily_Return'] = df_indicators['Close'].pct_change()
+    
+    # 计算累计收益率
+    df_indicators['Cumulative_Return'] = (1 + df_indicators['Daily_Return']).cumprod()
+    
+    # 计算波动率（年化）
+    trading_days = 252
+    df_indicators['Volatility'] = df_indicators['Daily_Return'].rolling(window=20).std() * np.sqrt(trading_days)
+    
+    # 计算RSI (相对强弱指数)
+    # RSI衡量价格变动的速度和变化，范围从0到100
+    # RSI > 70表示超买情况（可能价格下跌）
+    # RSI < 30表示超卖情况（可能价格上涨）
+    delta = df_indicators['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=ANALYSIS_CONFIG['rsi_period']).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=ANALYSIS_CONFIG['rsi_period']).mean()
+    
+    # 避免除以零的错误
+    with np.errstate(divide='ignore', invalid='ignore'):
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+    
+    df_indicators['RSI'] = rsi
+    
+    # 计算MACD
+    exp12 = df_indicators['Close'].ewm(span=12, adjust=False).mean()
+    exp26 = df_indicators['Close'].ewm(span=26, adjust=False).mean()
+    df_indicators['MACD'] = exp12 - exp26
+    df_indicators['MACD_Signal'] = df_indicators['MACD'].ewm(span=9, adjust=False).mean()
+    df_indicators['MACD_Histogram'] = df_indicators['MACD'] - df_indicators['MACD_Signal']
+    
+    # 计算KDJ
+    low_min = df_indicators['Low'].rolling(window=9).min()
+    high_max = df_indicators['High'].rolling(window=9).max()
+    rsv = (df_indicators['Close'] - low_min) / (high_max - low_min) * 100
+    df_indicators['K'] = rsv.ewm(com=2).mean()
+    df_indicators['D'] = df_indicators['K'].ewm(com=2).mean()
+    df_indicators['J'] = 3 * df_indicators['K'] - 2 * df_indicators['D']
+    
+    # 计算OBV
+    df_indicators['OBV'] = (np.sign(df_indicators['Close'].diff()) * df_indicators['Volume']).fillna(0).cumsum()
+    
+    return df_indicators
+
+def calculate_factor_exposure(df, index_name):
+    """
+    计算多因子暴露度
+    """
+    factors = {}
+    
+    # 价值因子 (市盈率倒数) - 使用价格波动率作为代理
+    factors['value'] = 1 / df['Volatility'].iloc[-1] if df['Volatility'].iloc[-1] > 0 else 0
+    
+    # 成长因子 (近期收益率)
+    if len(df) >= 20:
+        factors['growth'] = (df['Close'].iloc[-1] / df['Close'].iloc[-20] - 1) * 100
+    else:
+        factors['growth'] = 0
+    
+    # 质量因子 (使用夏普比率作为代理)
+    avg_return = df['Daily_Return'].mean() * 252  # 年化收益率
+    factors['quality'] = avg_return / df['Volatility'].iloc[-1] if df['Volatility'].iloc[-1] > 0 else 0
+    
+    # 动量因子 (近期收益率)
+    factors['momentum'] = factors['growth']
+    
+    # 波动率因子
+    factors['volatility'] = df['Volatility'].iloc[-1] if 'Volatility' in df.columns else 0
+    
+    # 根据ETF类型调整因子权重
+    factor_weights = {
+        '黄金ETF': {'value': 0.3, 'momentum': 0.4, 'volatility': 0.3},
+        '沪深300': {'value': 0.4, 'quality': 0.3, 'momentum': 0.3},
+        '人工智能ETF': {'growth': 0.5, 'momentum': 0.3, 'volatility': 0.2},
+        '主要消费': {'value': 0.4, 'quality': 0.4, 'volatility': 0.2},
+        '高成长产业': {'growth': 0.6, 'momentum': 0.4},
+        '半导体': {'growth': 0.4, 'momentum': 0.3, 'volatility': 0.3},
+        '纳斯达克': {'growth': 0.4, 'quality': 0.3, 'volatility': 0.3},
+        '农业': {'value': 0.4, 'growth': 0.3, 'volatility': 0.3},
+        '资源': {'value': 0.5, 'momentum': 0.3, 'volatility': 0.2}
+    }
+    
+    # 计算综合因子得分
+    composite_score = 0
+    for factor, weight in factor_weights.get(INDEX_CONFIG[index_name]['type'], {}).items():
+        composite_score += factors.get(factor, 0) * weight
+    
+    return {
+        'factors': factors,
+        'composite_score': composite_score,
+        'factor_weights': factor_weights.get(INDEX_CONFIG[index_name]['type'], {})
+    }
+
+def sector_rotation_analysis(index_data):
+    """
+    行业轮动分析 - 识别当前市场领涨行业
+    """
+    sector_performance = {}
+    
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty:
+            # 计算近期表现 (20日收益率)
+            if len(data) >= 20:
+                performance = (data['Close'].iloc[-1] / data['Close'].iloc[-20] - 1) * 100
+                sector_performance[index_name] = performance
+    
+    # 排序并识别领涨行业
+    sorted_sectors = sorted(sector_performance.items(), key=lambda x: x[1], reverse=True)
+    
+    # 计算行业相对强度
+    avg_performance = np.mean(list(sector_performance.values())) if sector_performance else 0
+    
+    # 修复：确保 market_breadth 是数值类型
+    positive_count = len([p for p in sector_performance.values() if p > 0])
+    total_count = max(len(sector_performance), 1)
+    market_breadth = positive_count / total_count
+    
+    rotation_analysis = {
+        'leading_sectors': sorted_sectors[:3] if sorted_sectors else [],  # 前3领涨行业
+        'lagging_sectors': sorted_sectors[-3:] if len(sorted_sectors) >= 3 else [],  # 后3行业
+        'market_breadth': market_breadth,  # 修复这里
+        'avg_performance': avg_performance
+    }
+    
+    return rotation_analysis
+
+def money_flow_analysis(df, period=20):
+    """
+    资金流分析 - 使用CMF(Chaikin Money Flow)指标
+    """
+    if df is None or df.empty:
+        return None
+    
+    # 计算资金流乘数
+    mf_multiplier = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / (df['High'] - df['Low'])
+    mf_multiplier = mf_multiplier.replace([np.inf, -np.inf], 0).fillna(0)
+    
+    # 计算资金流体积
+    mf_volume = mf_multiplier * df['Volume']
+    
+    # 计算Chaikin资金流
+    cmf = mf_volume.rolling(window=period).sum() / df['Volume'].rolling(window=period).sum()
+    
+    # 生成信号
+    latest_cmf = cmf.iloc[-1] if not cmf.empty else 0
+    signal = "买入" if latest_cmf > 0.05 else "卖出" if latest_cmf < -0.05 else "中性"
+    
+    # 确定趋势方向
+    if len(cmf) > 1:
+        trend = "上升" if cmf.iloc[-1] > cmf.iloc[-2] else "下降"
+    else:
+        trend = "未知"
+    
+    return {
+        'cmf': latest_cmf,
+        'signal': signal,
+        'trend': trend
+    }
+
+def market_sentiment_indicators():
+    """
+    获取市场情绪指标
+    """
+    try:
+        # 使用Tushare获取融资融券数据(市场情绪指标)
+        ts.set_token(ANALYSIS_CONFIG['tushare_token'])
+        pro = ts.pro_api()
+        
+        # 获取最近交易日的融资融券数据
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        margin_data = pro.margin(trade_date=today)
+        
+        if margin_data is None or margin_data.empty:
+            # 如果没有当天数据，获取最近一天的数据
+            margin_data = pro.margin(trade_date='')
+            margin_data = margin_data.head(1)
+        
+        # 计算情绪指标
+        if margin_data is not None and not margin_data.empty:
+            rzye = margin_data['rzye'].iloc[0]  # 融资余额
+            rqye = margin_data['rqye'].iloc[0]  # 融券余额
+            margin_ratio = rzye / rqye if rqye > 0 else 0
             
-            const result = await response.json();
-            document.getElementById('messageStatus').textContent = result.message || '留言发送成功！';
-            document.getElementById('messageForm').reset();
-            loadMessages(); // 重新加载留言
-        } catch (error) {
-            document.getElementById('messageStatus').textContent = '发送失败，请稍后重试。';
-            console.error('Error:', error);
-        }
-    }
-
-    async function loadMessages() {
-        try {
-            const response = await fetch('/api/messages');
-            const data = await response.json();
-            const container = document.getElementById('messagesContainer');
-            container.innerHTML = '';
+            sentiment = {
+                'margin_balance': rzye,
+                'short_balance': rqye,
+                'margin_ratio': margin_ratio,
+                'sentiment': '乐观' if margin_ratio > 3 else '悲观' if margin_ratio < 1.5 else '中性'
+            }
             
-            data.messages.forEach(msg => {
-                const msgDiv = document.createElement('div');
-                msgDiv.style.cssText = `
-                    background: rgba(255, 255, 255, 0.05);
-                    border: 1px solid #17f700;
-                    border-radius: 8px;
-                    padding: 1rem;
-                    margin-bottom: 1rem;
-                `;
-                msgDiv.innerHTML = `
-                    <div style="color: #fff; font-weight: bold;">${msg.name}${msg.nickname ? ` (${msg.nickname})` : ''}</div>
-                    <div style="color: #17f700; margin: 0.5rem 0;">${msg.message}</div>
-                    <div style="color: #666; font-size: 0.8rem;">${new Date(msg.timestamp).toLocaleString()}</div>
-                `;
-                container.appendChild(msgDiv);
-            });
-        } catch (error) {
-            console.error('Error loading messages:', error);
+            return sentiment
+        
+        return None
+    except Exception as e:
+        print(f"获取市场情绪指标出错: {str(e)}")
+        return None
+
+def ml_forecast(df, forecast_days=5):
+    """
+    使用机器学习方法进行预测增强
+    """
+    if df is None or len(df) < 60:
+        return None
+    
+    # 准备特征
+    features = df[['Close', 'Volume']].copy()
+    
+    # 添加技术指标作为特征
+    features['SMA_5'] = df['Close'].rolling(window=5).mean()
+    features['SMA_20'] = df['Close'].rolling(window=20).mean()
+    features['Momentum'] = df['Close'].pct_change(periods=5)
+    features['Volatility'] = df['Close'].rolling(window=20).std()
+    
+    # 清理数据
+    features = features.dropna()
+    
+    if len(features) < 30:
+        return None
+    
+    # 准备训练数据
+    X = features[:-forecast_days].values
+    y = df['Close'][forecast_days:].values[:len(X)]
+    
+    if len(X) != len(y):
+        min_len = min(len(X), len(y))
+        X = X[:min_len]
+        y = y[:min_len]
+    
+    if len(X) == 0 or len(y) == 0:
+        return None
+    
+    # 标准化特征
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    # 训练随机森林模型
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_scaled, y)
+    
+    # 进行预测
+    last_features = features.iloc[-forecast_days:].values
+    last_features_scaled = scaler.transform(last_features)
+    forecast = model.predict(last_features_scaled)
+    
+    # 创建预测日期
+    last_date = df.index[-1]
+    forecast_dates = [last_date + datetime.timedelta(days=i+1) for i in range(forecast_days)]
+    
+    # 创建结果DataFrame
+    forecast_df = pd.DataFrame({
+        'Date': forecast_dates,
+        'ML_Forecast': forecast
+    })
+    forecast_df.set_index('Date', inplace=True)
+    
+    return forecast_df
+
+def enhanced_ml_forecast(df, forecast_days=5):
+    """
+    使用增强的机器学习方法进行预测
+    """
+    if df is None or len(df) < 60:
+        return None
+    
+    try:
+        # 准备特征
+        features = df[['Close', 'Volume', 'RSI', 'MACD', 'SMA_20', 'SMA_60', 'Volatility']].copy()
+        
+        # 添加技术指标作为特征
+        features['Momentum_5'] = df['Close'].pct_change(periods=5)
+        features['Momentum_10'] = df['Close'].pct_change(periods=10)
+        features['Volatility_20'] = df['Close'].rolling(window=20).std()
+        features['Price_MA_Ratio'] = df['Close'] / df['SMA_20']
+        features['RSI_Signal'] = np.where(df['RSI'] > 70, 1, np.where(df['RSI'] < 30, -1, 0))
+        
+        # 清理数据
+        features = features.dropna()
+        
+        if len(features) < 30:
+            return None
+        
+        # 准备训练数据
+        X = features[:-forecast_days].values
+        y = df['Close'][forecast_days:].values[:len(X)]
+        
+        if len(X) != len(y):
+            min_len = min(len(X), len(y))
+            X = X[:min_len]
+            y = y[:min_len]
+        
+        if len(X) == 0 or len(y) == 0:
+            return None
+        
+        # 使用多种机器学习模型进行预测
+        models = {
+            'random_forest': RandomForestRegressor(n_estimators=100, random_state=42),
+            'gradient_boosting': GradientBoostingRegressor(n_estimators=100, random_state=42),
+            'xgboost': XGBRegressor(n_estimators=100, random_state=42)
         }
+        
+        # 时间序列交叉验证
+        tscv = TimeSeriesSplit(n_splits=3)
+        
+        best_model = None
+        best_score = float('inf')
+        best_model_name = ""
+        
+        # 评估每个模型
+        for name, model in models.items():
+            if name not in ANALYSIS_CONFIG['ml_models']:
+                continue
+                
+            scores = []
+            for train_index, test_index in tscv.split(X):
+                X_train, X_test = X[train_index], X[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+                
+                model.fit(X_train, y_train)
+                y_pred = model.predict(X_test)
+                score = mean_squared_error(y_test, y_pred)
+                scores.append(score)
+            
+            avg_score = np.mean(scores)
+            if avg_score < best_score:
+                best_score = avg_score
+                best_model = model
+                best_model_name = name
+        
+        print(f"✅ 选择最佳模型: {best_model_name}, RMSE: {np.sqrt(best_score):.4f}")
+        
+        # 使用最佳模型进行预测
+        best_model.fit(X, y)
+        
+        # 进行预测
+        last_features = features.iloc[-forecast_days:].values
+        forecast = best_model.predict(last_features)
+        
+        # 创建预测日期
+        last_date = df.index[-1]
+        forecast_dates = [last_date + datetime.timedelta(days=i+1) for i in range(forecast_days)]
+        
+        # 创建结果DataFrame
+        forecast_df = pd.DataFrame({
+            'Date': forecast_dates,
+            'ML_Forecast': forecast,
+            'Model': best_model_name
+        })
+        forecast_df.set_index('Date', inplace=True)
+        
+        return forecast_df
+        
+    except Exception as e:
+        print(f"❌ 增强机器学习预测出错: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return None
+
+def find_potential_etfs():
+    """
+    发现市场上有潜力的ETF基金
+    """
+    print("正在搜索有潜力的ETF基金...")
+    
+    try:
+        # 使用AKShare获取所有ETF基金列表 - 使用不同的接口
+        etf_list = ak.fund_etf_spot_em()
+        
+        if etf_list is None or etf_list.empty:
+            print("⚠️ 未获取到ETF基金列表")
+            return []
+        
+        # 筛选条件：近期表现良好、成交量活跃的ETF
+        potential_etfs = []
+        
+        for _, etf in etf_list.iterrows():
+            symbol = etf['代码']  # 使用正确的列名
+            name = etf['名称']
+            
+            # 获取该ETF的历史数据
+            try:
+                etf_data = ak.fund_etf_hist_em(symbol=symbol, period="daily", adjust="")
+                
+                if etf_data is None or etf_data.empty:
+                    continue
+                
+                # 重命名列以确保一致性
+                etf_data = etf_data.rename(columns={
+                    '日期': 'date',
+                    '开盘': 'open',
+                    '收盘': 'close',
+                    '最高': 'high',
+                    '最低': 'low',
+                    '成交量': 'volume'
+                })
+                
+                # 计算近期表现
+                if len(etf_data) >= 20:
+                    # 计算20日收益率
+                    recent_return = (etf_data['close'].iloc[-1] / etf_data['close'].iloc[-20] - 1) * 100
+                    
+                    # 计算平均成交量
+                    avg_volume = etf_data['volume'].mean()
+                    
+                    # 筛选条件：近期收益率>3%且成交量活跃
+                    if recent_return > 3 and avg_volume > 1000000:  # 成交量大于100万
+                        # 获取更多详细信息
+                        detail_info = {
+                            'symbol': symbol,
+                            'name': name,
+                            'recent_return': recent_return,
+                            'current_price': etf_data['close'].iloc[-1],
+                            'avg_volume': avg_volume,
+                            'category': etf.get('类型', '未知')
+                        }
+                        
+                        potential_etfs.append(detail_info)
+            except Exception as e:
+                print(f"❌ 处理ETF {symbol}({name}) 时出错: {str(e)}")
+                continue
+        
+        # 按收益率排序
+        potential_etfs.sort(key=lambda x: x['recent_return'], reverse=True)
+        
+        print(f"✅ 发现 {len(potential_etfs)} 个有潜力的ETF基金")
+        return potential_etfs[:10]  # 返回前10个
+        
+    except Exception as e:
+        print(f"❌ 搜索有潜力ETF时出错: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return []
+
+def correlation_analysis(index_data):
+    """
+    分析各ETF之间的相关性
+    """
+    # 提取收盘价数据
+    close_prices = pd.DataFrame()
+    
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty:
+            close_prices[index_name] = data['Close']
+    
+    if close_prices.empty:
+        return None
+    
+    # 计算相关性矩阵
+    correlation_matrix = close_prices.corr()
+    
+    # 找出高度相关和低相关的ETF对
+    high_corr_pairs = []
+    low_corr_pairs = []
+    
+    n = len(correlation_matrix.columns)
+    for i in range(n):
+        for j in range(i+1, n):
+            col_i = correlation_matrix.columns[i]
+            col_j = correlation_matrix.columns[j]
+            corr_value = correlation_matrix.iloc[i, j]
+            
+            if corr_value > 0.7:
+                high_corr_pairs.append((col_i, col_j, corr_value))
+            elif corr_value < 0.3:
+                low_corr_pairs.append((col_i, col_j, corr_value))
+    
+    # 排序
+    high_corr_pairs.sort(key=lambda x: x[2], reverse=True)
+    low_corr_pairs.sort(key=lambda x: x[2])
+    
+    return {
+        'correlation_matrix': correlation_matrix,
+        'high_correlation_pairs': high_corr_pairs[:5],  # 前5个高相关对
+        'low_correlation_pairs': low_corr_pairs[:5],    # 前5个低相关对
+        'diversification_opportunities': low_corr_pairs[:3]  # 最佳分散投资机会
     }
 
-    // 基金报告邮件接口调用：请把 URL 改为你后端部署地址（例如 https://your-backend-railway-url）
-    const ETF_BACKEND_API = 'http://localhost:5000';
+def arima_forecast(df, forecast_days=5):
+    """
+    使用ARIMA模型进行预测
+    
+    :param df: 包含Close列的DataFrame
+    :param forecast_days: 预测天数
+    :return: 预测结果DataFrame
+    """
+    # 准备数据
+    data = df['Close'].dropna()
+    
+    # 检查数据是否足够
+    if len(data) < 30:
+        print("⚠️ 数据量不足，无法进行ARIMA预测")
+        return None, None
+    
+    try:
+        # 拟合ARIMA模型
+        model = ARIMA(data, order=ANALYSIS_CONFIG['arima_order'])
+        model_fit = model.fit()
+        
+        # 进行预测
+        forecast = model_fit.get_forecast(steps=forecast_days)
+        forecast_values = forecast.predicted_mean
+        conf_int = forecast.conf_int()
+        
+        # 创建预测日期
+        last_date = data.index[-1]
+        forecast_dates = [last_date + datetime.timedelta(days=i+1) for i in range(forecast_days)]
+        
+        # 创建结果DataFrame
+        forecast_df = pd.DataFrame({
+            'Date': forecast_dates,
+            'Forecast': forecast_values,
+            'Lower_CI': conf_int.iloc[:, 0],
+            'Upper_CI': conf_int.iloc[:, 1]
+        })
+        forecast_df.set_index('Date', inplace=True)
+        
+        # 计算预测误差（使用历史数据验证）
+        history = data[-30:]  # 使用最后30天数据
+        history_model = ARIMA(history, order=ANALYSIS_CONFIG['arima_order'])
+        history_fit = history_model.fit()
+        history_forecast = history_fit.get_forecast(steps=5)
+        history_forecast_values = history_forecast.predicted_mean
+        
+        # 计算RMSE
+        actual = history[-5:]  # 最后5天作为验证
+        rmse = np.sqrt(mean_squared_error(actual, history_forecast_values))
+        
+        print(f"✅ ARIMA预测完成，RMSE: {rmse:.4f}")
+        return forecast_df, rmse
+    
+    except Exception as e:
+        print(f"❌ ARIMA预测出错: {str(e)}")
+        return None, None
 
-    document.addEventListener('DOMContentLoaded', function() {
-        const fundReportForm = document.getElementById('fundReportForm');
-        if (fundReportForm) {
-            fundReportForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const email = document.getElementById('fundEmail').value.trim();
-                const fundCode = document.getElementById('fundCode').value.trim();
-                const text = document.getElementById('fundMessage').value.trim();
-                const statusEl = document.getElementById('fundReportStatus');
+def fetch_news():
+    """
+    使用新API获取财经新闻并进行简单情感分析
+    """
+    print("正在获取财经新闻 (新API)...")
+    api_key = EMAIL_CONFIG.get('news_api_key')
+    if not api_key:
+        print("⚠️ 未配置新闻API密钥，跳过新闻获取")
+        return []
+    
+    try:
+        # 构建请求参数
+        params = {
+            'key': api_key,
+            'num': 10  # 默认获取10条
+        }
+        # 发送GET请求
+        response = requests.get('https://whyta.cn/api/tx/generalnews', params=params)
+        data = response.json()
+        
+        if 'code' in data and data['code'] != 200:
+            print(f"❌ API请求失败: {data.get('msg', '未知错误')}")
+            return []
+        
+        news_items = []
+        for item in data.get('result', {}).get('list', []):
+            title = item.get('title', '')
+            description = item.get('description', '')
+            url = item.get('url', '')
+            publish_time = item.get('ctime', '')
+            source = item.get('source', '')
+            
+            # 简单情感分析（基于标题和描述）
+            positive_words = ['上涨', '增长', '利好', '复苏', '突破', '创新高', '强劲', '买入', '推荐', '大涨']
+            negative_words = ['下跌', '下降', '利空', '衰退', '破位', '创新低', '疲软', '卖出', '减持', '大跌']
+            sentiment_score = 0
+            text = f"{title} {description}".lower()
+            for word in positive_words:
+                if word in text:
+                    sentiment_score += 1
+            for word in negative_words:
+                if word in text:
+                    sentiment_score -= 1
+            # 确定情感
+            sentiment = 'positive' if sentiment_score > 0 else 'negative' if sentiment_score < 0 else 'neutral'
+            
+            news_items.append({
+                'title': title,
+                'description': description,
+                'url': url,
+                'published_at': publish_time,
+                'source': source,
+                'sentiment': sentiment,
+                'sentiment_score': sentiment_score
+            })
+        
+        print(f"✅ 成功获取 {len(news_items)} 条财经新闻")
+        return news_items
+    except Exception as e:
+        print(f"❌ 新闻获取出错: {str(e)}")
+        return []
 
-                if (!email) {
-                    statusEl.textContent = '请填写收件邮箱。';
-                    return;
-                }
+def analyze_market_condition(news_items, index_data):
+    """
+    分析市场整体状况
+    
+    :param news_items: 新闻列表
+    :param index_data: 指数数据
+    :return: 市场状况分析结果
+    """
+    print("正在分析市场状况...")
+    
+    # 1. 新闻情感分析
+    total_score = sum(item['sentiment_score'] for item in news_items)
+    avg_sentiment = total_score / max(len(news_items), 1)
+    
+    # 2. 指数趋势分析
+    trend_scores = []
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty:
+            # 检查最近5天的趋势
+            recent_close = data['Close'][-5:]
+            trend = (recent_close.iloc[-1] - recent_close.iloc[0]) / recent_close.iloc[0]
+            trend_scores.append(trend * 100)  # 转换为百分比
+    
+    avg_trend = np.mean(trend_scores) if trend_scores else 0
+    
+    # 3. 综合判断
+    market_condition = {
+        'news_sentiment': avg_sentiment,
+        'index_trend': avg_trend,
+        'overall': 'neutral'
+    }
+    
+    # 综合判断市场状况
+    if avg_sentiment > 1.5 and avg_trend > 0.5:
+        market_condition['overall'] = 'bullish'  # 牛市
+    elif avg_sentiment < -1.5 and avg_trend < -0.5:
+        market_condition['overall'] = 'bearish'  # 熊市
+    else:
+        market_condition['overall'] = 'neutral'  # 震荡
+    
+    print(f"✅ 市场状况分析完成: {market_condition['overall']}")
+    return market_condition
 
-                statusEl.textContent = '正在请求发送报告，请稍候...';
+def generate_executive_summary(market_condition, rotation_analysis, recommendations, potential_etfs):
+    """
+    生成执行摘要
+    """
+    summary = ""
+    
+    # 市场整体状况
+    market_status = {
+        'bullish': "牛市",
+        'bearish': "熊市",
+        'neutral': "震荡市"
+    }
+    summary += f"📈 市场整体处于{market_status[market_condition['overall']]}状态"
+    
+    if market_condition['news_sentiment'] > 0.5:
+        summary += "，新闻情绪积极"
+    elif market_condition['news_sentiment'] < -0.5:
+        summary += "，新闻情绪消极"
+    else:
+        summary += "，新闻情绪中性"
+    
+    summary += f"，指数平均表现{market_condition['index_trend']:.2f}%。\n\n"
+    
+    # 行业轮动情况
+    if rotation_analysis and rotation_analysis.get('leading_sectors'):
+        summary += "🏆 领涨行业: "
+        leading_sectors = []
+        for sector, perf in rotation_analysis.get('leading_sectors', [])[:3]:
+            leading_sectors.append(f"{INDEX_CONFIG.get(sector, {}).get('name', sector)}({perf:.2f}%)")
+        summary += "、".join(leading_sectors) + "\n\n"
+    
+    # 投资建议摘要
+    buy_recommendations = []
+    sell_recommendations = []
+    hold_recommendations = []
+    
+    for index_name, rec in recommendations.items():
+        if rec['action'] == '买入' or rec['action'] == '强烈建议买入':
+            buy_recommendations.append(INDEX_CONFIG[index_name]['name'])
+        elif rec['action'] == '卖出' or rec['action'] == '强烈建议卖出':
+            sell_recommendations.append(INDEX_CONFIG[index_name]['name'])
+        else:
+            hold_recommendations.append(INDEX_CONFIG[index_name]['name'])
+    
+    if buy_recommendations:
+        summary += f"✅ 建议关注: {', '.join(buy_recommendations)}\n"
+    
+    if sell_recommendations:
+        summary += f"❌ 建议规避: {', '.join(sell_recommendations)}\n"
+    
+    if hold_recommendations:
+        summary += f"➡️ 建议持有: {', '.join(hold_recommendations)}\n"
+    
+    summary += "\n"
+    
+    # 有潜力的其他ETF
+    if potential_etfs:
+        summary += "🔥 市场其他机会:\n"
+        for i, etf in enumerate(potential_etfs[:3], 1):
+            summary += f"  {i}. {etf['name']}({etf['symbol']}): 近期涨幅{etf['recent_return']:.2f}%\n"
+    
+    return summary
 
-                try {
-                    const resp = await fetch(`${ETF_BACKEND_API}/api/send_report`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            emails: [email],
-                            fund_code: fundCode || undefined,
-                            note: text || undefined,
-                        }),
-                    });
+# ================
+# 数据可视化
+# ================
 
-                    const result = await resp.json();
-                    if (resp.ok) {
-                        statusEl.textContent = '请求已发送，后台正在处理邮件：' + (result.message || '请到邮箱查看。');
-                        fundReportForm.reset();
-                    } else {
-                        statusEl.textContent = '发送失败：' + (result.error || '请稍后再试。');
+def plot_price_comparison(index_data):
+    """绘制所有指数价格对比图"""
+    plt.figure(figsize=(14, 8))
+    
+    # 获取最新收盘价用于排序
+    latest_prices = {}
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty:
+            latest_prices[index_name] = data['Close'].iloc[-1]
+    
+    # 按最新价格排序
+    sorted_indices = sorted(latest_prices.items(), key=lambda x: x[1], reverse=True)
+    
+    # 绘制价格曲线
+    for index_name, _ in sorted_indices:
+        data = index_data[index_name]
+        if data is not None and not data.empty:
+            plt.plot(data['Close'], label=f"{INDEX_CONFIG[index_name]['name']} ({INDEX_CONFIG[index_name]['code']})", linewidth=2)
+    
+    plt.title('Index Price Comparison', fontsize=16, fontweight='bold')
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Price', fontsize=12)
+    plt.legend(loc='best')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # 格式化x轴日期
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    plt.gcf().autofmt_xdate()  # 旋转
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    if not os.path.exists(ANALYSIS_CONFIG['report_path']):
+        os.makedirs(ANALYSIS_CONFIG['report_path'])
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/index_price_comparison.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return True
+
+def plot_cumulative_return(index_data):
+    """绘制累计收益率对比图"""
+    plt.figure(figsize=(14, 7))
+    
+    # 绘制累计收益率
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty and 'Cumulative_Return' in data.columns:
+            plt.plot(data['Cumulative_Return'], 
+                     label=f"{INDEX_CONFIG[index_name]['name']} ({INDEX_CONFIG[index_name]['code']})", 
+                     linewidth=2)
+    
+    # 获取最新收益率用于标注
+    latest_returns = {}
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty and 'Cumulative_Return' in data.columns:
+            latest_returns[index_name] = data['Cumulative_Return'].iloc[-1] - 1
+    
+    # 添加收益率标注
+    for index_name, return_value in latest_returns.items():
+        data = index_data[index_name]
+        plt.annotate(f"{return_value:.2%}", 
+                     xy=(data.index[-1], data['Cumulative_Return'].iloc[-1]),
+                     xytext=(10, 0), textcoords='offset points',
+                     fontsize=9, bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.7))
+    
+    plt.title('Cumulative Return Comparison', fontsize=16, fontweight='bold')
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Cumulative Return', fontsize=12)
+    plt.legend(loc='best')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Y轴格式化为百分比
+    plt.gca().yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f'{y-1:.0%}'))
+    
+    # 格式化x轴日期
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    plt.gcf().autofmt_xdate()  # 旋转
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/cumulative_return.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return True
+
+def plot_rsi_comparison(index_data):
+    """
+    绘制RSI对比图
+    
+    RSI (相对强弱指数) 解读:
+    - RSI > 70: 超买区域 (可能价格下跌)
+    - RSI < 30: 超卖区域 (可能价格上涨)
+    - RSI 在 30-70 之间: 正常区域
+    - RSI 上穿 50: 看涨信号
+    - RSI 下穿 50: 看跌信号
+    """
+    plt.figure(figsize=(14, 7))
+    
+    # 绘制RSI
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty and 'RSI' in data.columns:
+            line = plt.plot(data['RSI'], 
+                     label=f"{INDEX_CONFIG[index_name]['name']} ({INDEX_CONFIG[index_name]['code']})", 
+                     linewidth=2)
+            
+            # 添加最新RSI值标注
+            latest_rsi = data['RSI'].iloc[-1]
+            plt.annotate(f"{latest_rsi:.1f}", 
+                         xy=(data.index[-1], latest_rsi),
+                         xytext=(10, 0), textcoords='offset points',
+                         fontsize=9, color=line[0].get_color(),
+                         bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.7))
+    
+    # 添加超买超卖线
+    plt.axhline(y=70, color='r', linestyle='--', alpha=0.7, label='Overbought (70)')
+    plt.axhline(y=30, color='g', linestyle='--', alpha=0.7, label='Oversold (30)')
+    plt.axhline(y=50, color='gray', linestyle='-', alpha=0.5, label='Neutral (50)')
+    
+    plt.title('RSI Indicator Comparison', fontsize=16, fontweight='bold')
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('RSI Value', fontsize=12)
+    plt.legend(loc='best')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # 设置y轴范围
+    plt.ylim(0, 100)
+    
+    # 格式化x轴日期
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    plt.gcf().autofmt_xdate()  # 旋转
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/rsi_comparison.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return True
+
+def plot_forecast(index_name, index_data, forecast_df):
+    """绘制预测图表"""
+    if forecast_df is None or forecast_df.empty:
+        return False
+    
+    plt.figure(figsize=(14, 7))
+    
+    # 获取数据
+    data = index_data[index_name]
+    
+    # 修复多维索引错误 - 将索引转换为 NumPy 数组
+    last_30_days = data.index[-30:].to_numpy()
+    last_30_prices = data['Close'][-30:].to_numpy()
+    
+    # 绘制历史数据
+    plt.plot(last_30_days, last_30_prices, label='Historical Price', color='blue', linewidth=2)
+    
+    # 绘制预测数据
+    forecast_line = plt.plot(forecast_df.index.to_numpy(), forecast_df['Forecast'].to_numpy(), 
+             label='Forecast Price', color='red', linestyle='--', linewidth=2)
+    
+    # 添加预测值标注
+    for i, (date, value) in enumerate(zip(forecast_df.index, forecast_df['Forecast'])):
+        plt.annotate(f"{value:.2f}", 
+                     xy=(date, value),
+                     xytext=(0, 10), textcoords='offset points',
+                     fontsize=9, color='red',
+                     bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.7))
+    
+    # 绘制置信区间
+    plt.fill_between(forecast_df.index.to_numpy(), 
+                     forecast_df['Lower_CI'].to_numpy(), 
+                     forecast_df['Upper_CI'].to_numpy(), 
+                     color='red', alpha=0.1, label='Confidence Interval')
+    
+    plt.title(f"{INDEX_CONFIG[index_name]['name']} Forecast ({ANALYSIS_CONFIG['forecast_days']} days)", fontsize=16, fontweight='bold')
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Price', fontsize=12)
+    plt.legend(loc='best')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/{index_name}_forecast.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return True
+
+def plot_news_sentiment(news_items):
+    """绘制新闻情感分析图表"""
+    if not news_items:
+        return False
+    
+    # 统计情感分布
+    sentiment_counts = {'positive': 0, 'neutral': 0, 'negative': 0}
+    for item in news_items:
+        sentiment_counts[item['sentiment']] += 1
+    
+    # 创建图表
+    plt.figure(figsize=(10, 6))
+    
+    # 绘制柱状图
+    sentiments = list(sentiment_counts.keys())
+    counts = list(sentiment_counts.values())
+    colors = ['green' if s == 'positive' else 'gray' if s == 'neutral' else 'red' for s in sentiments]
+    
+    bars = plt.bar(sentiments, counts, color=colors, alpha=0.7)
+    
+    plt.title('Financial News Sentiment Analysis', fontsize=16, fontweight='bold')
+    plt.xlabel('Sentiment', fontsize=12)
+    plt.ylabel('News Count', fontsize=12)
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    
+    # 在柱子上显示数值
+    for bar, count in zip(bars, counts):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
+                 str(count), ha='center', va='bottom', fontweight='bold')
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/news_sentiment.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return True
+
+def calculate_valuation_metrics(df, index_name):
+    """
+    计算估值指标
+    """
+    if df is None or df.empty:
+        return None
+    
+    metrics = {}
+    
+    # 计算历史分位数 (当前价格在历史中的位置)
+    if len(df) >= 252:  # 一年数据
+        current_price = df['Close'].iloc[-1]
+        historical_prices = df['Close'][-252:]  # 最近一年
+        percentile = (historical_prices < current_price).sum() / len(historical_prices)
+        metrics['price_percentile'] = percentile
+        metrics['valuation'] = '高估' if percentile > 0.7 else '低估' if percentile < 0.3 else '合理'
+    else:
+        metrics['price_percentile'] = None
+        metrics['valuation'] = '数据不足'
+    
+    # 计算波动率分位数
+    if 'Volatility' in df.columns:
+        current_vol = df['Volatility'].iloc[-1]
+        if len(df) >= 60:
+            historical_vol = df['Volatility'][-60:]  # 最近3个月
+            vol_percentile = (historical_vol < current_vol).sum() / len(historical_vol)
+            metrics['volatility_percentile'] = vol_percentile
+        else:
+            metrics['volatility_percentile'] = None
+    
+    # 计算RSI状态
+    if 'RSI' in df.columns:
+        current_rsi = df['RSI'].iloc[-1]
+        metrics['rsi_status'] = '超买' if current_rsi > 70 else '超卖' if current_rsi < 30 else '正常'
+        metrics['rsi'] = current_rsi
+    
+    # 计算技术面评分
+    tech_score = 0
+    reasons = []
+    
+    # RSI评分
+    if current_rsi < 30:
+        tech_score += 2
+        reasons.append("RSI超卖，技术反弹概率大")
+    elif current_rsi > 70:
+        tech_score -= 2
+        reasons.append("RSI超买，回调风险高")
+    
+    # 价格分位数评分
+    if metrics['price_percentile'] is not None:
+        if metrics['price_percentile'] < 0.3:
+            tech_score += 2
+            reasons.append("价格处于历史较低水平")
+        elif metrics['price_percentile'] > 0.7:
+            tech_score -= 2
+            reasons.append("价格处于历史较高水平")
+    
+    # 均线系统评分
+    if 'SMA_20' in df.columns and 'SMA_60' in df.columns:
+        sma_20 = df['SMA_20'].iloc[-1]
+        sma_60 = df['SMA_60'].iloc[-1]
+        current_price = df['Close'].iloc[-1]
+        
+        if current_price > sma_20 > sma_60:
+            tech_score += 1
+            reasons.append("均线多头排列")
+        elif current_price < sma_20 < sma_60:
+            tech_score -= 1
+            reasons.append("均线空头排列")
+    
+    metrics['technical_score'] = tech_score
+    metrics['technical_reasons'] = reasons
+    
+    return metrics
+
+def sector_rotation_tracking():
+    """
+    板块轮动追踪分析
+    """
+    print("🔄 开始板块轮动追踪分析...")
+    
+    sector_analysis = {}
+    
+    # 分析每个板块
+    for sector_key, sector_info in SECTOR_CONFIG.items():
+        print(f"正在分析 {sector_info['name']} 板块...")
+        
+        sector_etfs = []
+        sector_avg_score = 0
+        valid_etfs = 0
+        
+        for etf_code in sector_info['etfs']:
+            # 获取ETF数据
+            etf_data = fetch_index_data_akshare(
+                etf_code, 
+                'sh' if etf_code.startswith('51') else 'sz',
+                (datetime.datetime.now() - datetime.timedelta(days=365)).strftime('%Y-%m-%d'),
+                datetime.datetime.now().strftime('%Y-%m-%d')
+            )
+            
+            if etf_data is not None and not etf_data.empty:
+                # 计算技术指标
+                etf_data = calculate_indicators(clean_data(etf_data))
+                
+                # 计算估值指标
+                valuation_metrics = calculate_valuation_metrics(etf_data, etf_code)
+                
+                if valuation_metrics:
+                    # 获取ETF名称
+                    etf_name = f"ETF{etf_code}"
+                    for config in INDEX_CONFIG.values():
+                        if config['code'] == etf_code:
+                            etf_name = config['name']
+                            break
+                    
+                    etf_analysis = {
+                        'code': etf_code,
+                        'name': etf_name,
+                        'current_price': etf_data['Close'].iloc[-1],
+                        'valuation': valuation_metrics['valuation'],
+                        'technical_score': valuation_metrics['technical_score'],
+                        'rsi': valuation_metrics.get('rsi', 0),
+                        'price_percentile': valuation_metrics.get('price_percentile', 0),
+                        'reasons': valuation_metrics.get('technical_reasons', [])
                     }
-                } catch (err) {
-                    statusEl.textContent = '网络异常，请检查后端是否可用。';
-                    console.error(err);
-                }
-            });
+                    
+                    sector_etfs.append(etf_analysis)
+                    sector_avg_score += valuation_metrics['technical_score']
+                    valid_etfs += 1
+        
+        # 计算板块平均分
+        if valid_etfs > 0:
+            sector_avg_score = sector_avg_score / valid_etfs
+        else:
+            sector_avg_score = 0
+        
+        sector_analysis[sector_key] = {
+            'name': sector_info['name'],
+            'description': sector_info['description'],
+            'etfs': sector_etfs,
+            'sector_score': sector_avg_score,
+            'recommendation': '重点关注' if sector_avg_score >= 2 else '谨慎关注' if sector_avg_score >= 0 else '暂时回避'
         }
-    });
-</script>
-</body>
-</html>
+    
+    return sector_analysis
+
+def plot_sector_rotation_analysis(sector_analysis):
+    """
+    绘制板块轮动分析图
+    """
+    if not sector_analysis:
+        return False
+    
+    # 创建子图
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 12))
+    
+    # 图1: 板块评分对比
+    sectors = []
+    scores = []
+    colors = []
+    
+    for sector_key, analysis in sector_analysis.items():
+        sectors.append(analysis['name'])
+        scores.append(analysis['sector_score'])
+        
+        # 根据评分设置颜色
+        if analysis['sector_score'] >= 2:
+            colors.append('green')
+        elif analysis['sector_score'] >= 0:
+            colors.append('yellow')
+        else:
+            colors.append('red')
+    
+    bars = ax1.barh(sectors, scores, color=colors, alpha=0.7)
+    ax1.set_xlabel('Comprehensive Evaluation Score')
+    ax1.set_title('Sector Rotation Score Comparison', fontsize=16, fontweight='bold')
+    ax1.axvline(x=0, color='black', linestyle='-', alpha=0.3)
+    ax1.axvline(x=2, color='green', linestyle='--', alpha=0.5, label='Focus Area')
+    ax1.axvline(x=0, color='orange', linestyle='--', alpha=0.5, label='Neutral Line')
+    
+    # 在柱子上添加数值
+    for bar, score in zip(bars, scores):
+        ax1.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2, 
+                f'{score:.1f}', ha='left', va='center', fontweight='bold')
+    
+    ax1.legend()
+    ax1.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    # 图2: ETF估值分布热力图
+    etf_data = []
+    for sector_key, analysis in sector_analysis.items():
+        for etf in analysis['etfs']:
+            etf_data.append({
+                'sector': analysis['name'],
+                'ETF': etf['name'],
+                'score': etf['technical_score'],
+                'valuation': etf['valuation'],
+                'RSI': etf['rsi']
+            })
+    
+    if etf_data:
+        df_heatmap = pd.DataFrame(etf_data)
+        
+        # 创建透视表
+        pivot_table = df_heatmap.pivot_table(
+            values='score', 
+            index='sector', 
+            columns='ETF', 
+            aggfunc='first'
+        ).fillna(0)
+        
+        # 绘制热力图
+        sns.heatmap(pivot_table, annot=True, cmap='RdYlGn', center=0, 
+                   ax=ax2, cbar_kws={'label': 'Technical Score'})
+        ax2.set_title('ETF Technical Score Heatmap', fontsize=16, fontweight='bold')
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/sector_rotation_analysis.png", 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return True
+
+def plot_valuation_radar(sector_analysis):
+    """
+    绘制估值雷达图
+    """
+    if not sector_analysis:
+        return False
+    
+    # 准备数据
+    categories = list(sector_analysis.keys())
+    N = len(categories)
+    
+    # 角度计算
+    angles = [n / float(N) * 2 * np.pi for n in range(N)]
+    angles += angles[:1]  # 闭合雷达图
+    
+    # 数据
+    scores = [sector_analysis[cat]['sector_score'] for cat in categories]
+    scores += scores[:1]  # 闭合数据
+    
+    # 创建雷达图
+    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(projection='polar'))
+    
+    # 绘制区域
+    ax.plot(angles, scores, 'o-', linewidth=2, label='Score')
+    ax.fill(angles, scores, alpha=0.25)
+    
+    # 设置类别标签 - 使用英文或拼音
+    sector_name_mapping = {
+        'large_cap': 'Large Cap',
+        'small_cap': 'Small Cap', 
+        'rmb_assets': 'RMB Assets',
+        'overseas': 'Overseas',
+        'bonds': 'Bonds',
+        'sector_rotation': 'Sector Rotation'
+    }
+    
+    labels = [sector_name_mapping.get(cat, cat) for cat in categories]
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels)
+    
+    # 设置y轴标签
+    ax.set_yticks([-2, 0, 2, 4])
+    ax.set_yticklabels(['Avoid', 'Neutral', 'Watch', 'Focus'])
+    ax.set_ylim(-2, 4)
+    
+    # 添加网格
+    ax.grid(True)
+    
+    plt.title('Sector Valuation Radar Chart', size=16, fontweight='bold', ha='center')
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/valuation_radar.png", 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return True
+
+def plot_sector_rotation(rotation_analysis):
+    """绘制行业轮动图表"""
+    if not rotation_analysis or not rotation_analysis.get('leading_sectors'):
+        return False
+    
+    # 提取数据
+    leading_sectors = rotation_analysis.get('leading_sectors', [])
+    lagging_sectors = rotation_analysis.get('lagging_sectors', [])
+    
+    # 合并数据
+    all_sectors = leading_sectors + lagging_sectors
+    sector_names = [INDEX_CONFIG.get(s[0], {}).get('name', s[0]) for s in all_sectors]
+    performances = [s[1] for s in all_sectors]
+    
+    # 创建颜色列表（领涨绿色，落后红色）
+    colors = ['green'] * len(leading_sectors) + ['red'] * len(lagging_sectors)
+    
+    # 创建图表
+    plt.figure(figsize=(12, 8))
+    bars = plt.barh(sector_names, performances, color=colors, alpha=0.7)
+    
+    # 添加数值标签
+    for bar, performance in zip(bars, performances):
+        plt.text(bar.get_width() + (0.5 if bar.get_width() >= 0 else -1.5), 
+                 bar.get_y() + bar.get_height()/2, 
+                 f'{performance:.2f}%', 
+                 ha='left' if bar.get_width() >= 0 else 'right', 
+                 va='center',
+                 fontweight='bold')
+    
+    plt.axvline(x=0, color='black', linestyle='-', alpha=0.3)
+    plt.title('Sector Rotation Analysis (20-day Return %)', fontsize=16, fontweight='bold')
+    plt.xlabel('Return (%)', fontsize=12)
+    plt.ylabel('Sector/Index', fontsize=12)
+    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/sector_rotation.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return True
+
+# ================
+# 智能分析与建议
+# ================
+
+def generate_investment_recommendation(index_name, data, forecast_df, rmse, market_condition, news_items, factor_analysis, money_flow):
+    """
+    生成投资建议
+    
+    :param index_name: 指数名称
+    :param data: 指数数据
+    :param forecast_df: 预测数据
+    :param rmse: 预测误差
+    :param market_condition: 市场状况
+    :param news_items: 新闻列表
+    :param factor_analysis: 多因子分析结果
+    :param money_flow: 资金流分析结果
+    :return: 投资建议
+    """
+    # 1. 技术指标分析
+    latest = data.iloc[-1]
+    rsi = latest['RSI']
+    close = latest['Close']
+    sma_20 = latest['SMA_20']
+    sma_60 = latest['SMA_60']
+    volatility = latest['Volatility']
+    
+    # 2. 预测分析
+    if forecast_df is not None and not forecast_df.empty:
+        forecast_trend = "下跌" if forecast_df['Forecast'].iloc[-1] < close else "上涨"
+        confidence = "低" if rmse > 0.05 else "中" if rmse > 0.02 else "高"
+    else:
+        forecast_trend = "未知"
+        confidence = "低"
+    
+    # 3. 新闻影响
+    index_news = [item for item in news_items if INDEX_CONFIG[index_name]['name'] in item['title'] or 
+                 INDEX_CONFIG[index_name]['description'] in item['title']]
+    
+    news_impact = "中性" if not index_news else "利好" if sum(item['sentiment_score'] for item in index_news) > 0 else "利空"
+    
+    # 4. 多因子分析
+    factor_score = factor_analysis.get('composite_score', 0) if factor_analysis else 0
+    
+    # 5. 资金流分析
+    money_flow_signal = money_flow.get('signal', '中性') if money_flow else '中性'
+    
+    # 6. 综合评分
+    score = 0
+    
+    # RSI评分
+    if rsi < 30:
+        score += 2  # 超卖，买入信号
+    elif rsi < 50:
+        score += 1  # 偏低，谨慎买入
+    elif rsi < 70:
+        score += 0  # 正常，持有
+    else:
+        score -= 1  # 超买，谨慎
+    
+    # 均线评分
+    if close > sma_20 and sma_20 > sma_60:
+        score += 2  # 多头排列，强势
+    elif close > sma_20:
+        score += 1  # 短期向上
+    elif close < sma_20 and sma_20 < sma_60:
+        score -= 2  # 空头排列，弱势
+    else:
+        score -= 1  # 短期向下
+    
+    # 预测评分
+    if forecast_trend == "上涨":
+        score += 1
+    else:
+        score -= 1
+    
+    # 新闻评分
+    if news_impact == "利好":
+        score += 1
+    elif news_impact == "利空":
+        score -= 1
+    
+    # 多因子评分
+    if factor_score > 0.5:
+        score += 1
+    elif factor_score < -0.5:
+        score -= 1
+    
+    # 资金流评分
+    if money_flow_signal == "买入":
+        score += 1
+    elif money_flow_signal == "卖出":
+        score -= 1
+    
+    # 市场整体评分
+    if market_condition['overall'] == 'bullish':
+        score += 1
+    elif market_condition['overall'] == 'bearish':
+        score -= 1
+    
+    # 7. 生成建议
+    if score >= 4:
+        recommendation = "强烈建议买入"
+        action = "买入"
+    elif score >= 2:
+        recommendation = "建议买入"
+        action = "买入"
+    elif score >= 0:
+        recommendation = "建议持有"
+        action = "持有"
+    elif score >= -2:
+        recommendation = "建议减仓"
+        action = "减仓"
+    else:
+        recommendation = "强烈建议卖出"
+        action = "卖出"
+    
+    # 8. 生成详细理由
+    reasons = []
+    
+    # RSI理由
+    if rsi < 30:
+        reasons.append(f"• RSI={rsi:.2f}，处于超卖区域，技术反弹可能性大")
+    elif rsi > 70:
+        reasons.append(f"• RSI={rsi:.2f}，处于超买区域，回调风险增加")
+    else:
+        reasons.append(f"• RSI={rsi:.2f}，处于正常区域，趋势稳定")
+    
+    # 均线理由
+    if close > sma_20 and sma_20 > sma_60:
+        reasons.append("• 价格在20日均线上方，且20日均线在60日均线上方，呈多头排列")
+    elif close > sma_20:
+        reasons.append("• 价格在20日均线上方，短期趋势向上")
+    elif close < sma_20 and sma_20 < sma_60:
+        reasons.append("• 价格在20日均线下方，且20日均线在60日均线下方，呈空头排列")
+    else:
+        reasons.append("• 价格在20日均线下方，短期趋势向下")
+    
+    # 预测理由
+    if forecast_df is not None and not forecast_df.empty:
+        forecast_change = (forecast_df['Forecast'].iloc[-1] - close) / close * 100
+        reasons.append(f"• ARIMA模型预测{ANALYSIS_CONFIG['forecast_days']}天后价格将{forecast_trend}约{abs(forecast_change):.2f}% (置信度: {confidence})")
+    
+    # 新闻理由
+    if index_news:
+        sentiment_text = "积极" if sum(item['sentiment_score'] for item in index_news) > 0 else "消极"
+        reasons.append(f"• 近期相关财经新闻情感偏向{sentiment_text}，可能影响短期走势")
+    
+    # 多因子理由
+    if factor_analysis:
+        reasons.append(f"• 多因子分析得分: {factor_score:.2f} (价值: {factor_analysis['factors'].get('value', 0):.2f}, "
+                      f"成长: {factor_analysis['factors'].get('growth', 0):.2f}%, "
+                      f"质量: {factor_analysis['factors'].get('quality', 0):.2f})")
+    
+    # 资金流理由
+    if money_flow:
+        reasons.append(f"• 资金流指标: {money_flow['cmf']:.3f} ({money_flow['signal']}, 趋势: {money_flow['trend']})")
+    
+    # 市场整体理由
+    market_text = {
+        'bullish': "当前市场整体呈牛市状态，有利于各类资产上涨",
+        'bearish': "当前市场整体呈熊市状态，需谨慎操作",
+        'neutral': "当前市场整体呈震荡状态，关注结构性机会"
+    }
+    reasons.append(f"• {market_text[market_condition['overall']]}")
+    
+    # 9. 生成详细建议
+    detailed_recommendation = f"{recommendation}\n\n【详细分析】\n" + "\n".join(reasons)
+    
+    return {
+        'action': action,
+        'recommendation': recommendation,
+        'score': score,
+        'detailed': detailed_recommendation,
+        'confidence': confidence,
+        'forecast_trend': forecast_trend,
+        'rsi': rsi,
+        'volatility': volatility,
+        'factor_score': factor_score,
+        'money_flow_signal': money_flow_signal
+    }
+# ================ 新增辅助函数 ================
+def set_recipient_emails(extra_emails):
+    """合并默认邮箱和用户输入的邮箱，去重后返回"""
+    default_emails = EMAIL_CONFIG['receiver_emails']
+    all_emails = list(set(default_emails + extra_emails))
+    return all_emails
+
+# ================
+# 邮件功能
+# ================
+
+def send_alert_email(subject, body):
+    """
+    发送预警邮件
+    
+    :param subject: 邮件主题
+    :param body: 邮件正文
+    :return: 发送是否成功
+    """
+    try:
+        # 创建邮件对象
+        msg = MIMEMultipart()
+        
+        # 正确设置From和To头
+        msg['From'] = f"{encode_rfc2047(EMAIL_CONFIG['sender_name'])} <{EMAIL_CONFIG['sender_email']}>"
+        # 对于多个收件人，To头可以写第一个收件人，其他用BCC
+        msg['To'] = f"{encode_rfc2047(EMAIL_CONFIG['receiver_name'])} <{EMAIL_CONFIG['receiver_emails'][0]}>"
+        
+        msg['Subject'] = subject
+        
+        # 添加正文
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        # 发送邮件
+        if EMAIL_CONFIG['use_ssl']:
+            server = smtplib.SMTP_SSL(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+        else:
+            server = smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+            server.starttls()
+        
+        server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
+        
+        # 发送给所有收件人
+        all_recipients = EMAIL_CONFIG['receiver_emails']
+        server.sendmail(
+            EMAIL_CONFIG['sender_email'], 
+            all_recipients,  # 这里改为所有收件人列表
+            msg.as_string()
+        )
+        server.quit()
+        print(f"✅ 预警邮件已成功发送到 {len(all_recipients)} 个收件人")
+        return True
+    except Exception as e:
+        print(f"❌ 发送预警邮件失败: {str(e)}")
+        return False
+
+def send_analysis_report_by_email(extra_emails=[]):
+    """生成并发送报告，extra_emails 是额外要发送的邮箱列表"""
+    # ========== 新增部分：动态设置收件人 ==========
+    if extra_emails:
+        all_emails = set_recipient_emails(extra_emails)
+        EMAIL_CONFIG['receiver_emails'] = all_emails
+        print(f"📧 报告将发送至: {all_emails}")
+    # ===========================================
+
+    current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"📊 正在生成并发送分析报告... ({current_time})")
+    
+    # 创建报告目录
+    os.makedirs(ANALYSIS_CONFIG['report_path'], exist_ok=True)
+    
+    # 获取所有指数数据
+    index_data = {}
+    for index_name in INDEX_CONFIG.keys():
+        index_data[index_name] = fetch_index_data_akshare(
+            INDEX_CONFIG[index_name]['code'], 
+            INDEX_CONFIG[index_name]['market'],
+            ANALYSIS_CONFIG['start_date'], 
+            ANALYSIS_CONFIG['end_date']
+        )
+    
+    # 检查数据是否获取成功
+    if not any(data is not None and not data.empty for data in index_data.values()):
+        error_msg = "所有指数数据获取失败，请检查网络连接或指数代码是否正确。\n"
+        
+        print(error_msg)
+        
+        # 发送错误通知
+        subject = "ETF分析报告 - 数据获取失败"
+        body = f"{error_msg}\n执行时间: {current_time}\n\n" \
+               f"可能原因：\n" \
+               f"1. 网络连接问题\n" \
+               f"2. 指数代码可能不正确\n\n" \
+               f"正在分析的指数：\n" + \
+               "\n".join([f"- {config['name']} ({config['code']})" for config in INDEX_CONFIG.values()])
+        
+        success = send_email(subject, body, include_charts=False)
+        return success
+    
+    # 数据清洗和指标计算
+    cleaned_data = {}
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty:
+            cleaned_data[index_name] = calculate_indicators(clean_data(data))
+    
+    # 获取新闻
+    news_items = fetch_news()
+    
+    # 分析市场状况
+    market_condition = analyze_market_condition(news_items, cleaned_data)
+    
+    # 多因子分析
+    factor_analyses = {}
+    for index_name, data in cleaned_data.items():
+        if data is not None and not data.empty:
+            factor_analyses[index_name] = calculate_factor_exposure(data, index_name)
+    
+    # 资金流分析
+    money_flows = {}
+    for index_name, data in cleaned_data.items():
+        if data is not None and not data.empty:
+            money_flows[index_name] = money_flow_analysis(data)
+    
+    # 行业轮动分析
+    rotation_analysis = sector_rotation_analysis(cleaned_data)
+    
+    # 相关性分析
+    correlation_result = correlation_analysis(cleaned_data)
+        
+    # 板块轮动追踪分析
+    sector_analysis = sector_rotation_tracking()
+    plot_sector_rotation_analysis(sector_analysis)
+    plot_valuation_radar(sector_analysis)
+    
+    # 市场情绪指标
+    market_sentiment = market_sentiment_indicators()
+    
+    # 发现有潜力的ETF
+    potential_etfs = find_potential_etfs()
+    
+    # 生成图表
+    plot_price_comparison(cleaned_data)
+    plot_cumulative_return(cleaned_data)
+    plot_rsi_comparison(cleaned_data)
+    plot_news_sentiment(news_items)
+    
+    # 绘制相关性矩阵
+    if correlation_result:
+        plot_correlation_matrix(correlation_result['correlation_matrix'])
+    
+    # 绘制行业轮动图
+    plot_sector_rotation(rotation_analysis)
+    
+    # 为每个指数生成预测和图表
+    forecasts = {}
+    forecast_rmses = {}
+    ml_forecasts = {}
+    for index_name in cleaned_data.keys():
+        if cleaned_data[index_name] is not None and not cleaned_data[index_name].empty:
+            # ARIMA预测
+            forecast_df, rmse = arima_forecast(cleaned_data[index_name], ANALYSIS_CONFIG['forecast_days'])
+            forecasts[index_name] = forecast_df
+            forecast_rmses[index_name] = rmse
+            
+            # 机器学习预测 (使用增强版)
+            ml_forecast_df = enhanced_ml_forecast(cleaned_data[index_name], ANALYSIS_CONFIG['forecast_days'])
+            ml_forecasts[index_name] = ml_forecast_df
+            
+            # 绘制预测图表
+            if forecast_df is not None:
+                plot_forecast(index_name, cleaned_data, forecast_df)
+    
+    # 生成投资建议
+    recommendations = {}
+    for index_name in cleaned_data.keys():
+        if (cleaned_data[index_name] is not None and not cleaned_data[index_name].empty and 
+            index_name in factor_analyses and index_name in money_flows):
+            recommendations[index_name] = generate_investment_recommendation(
+                index_name, 
+                cleaned_data[index_name], 
+                forecasts.get(index_name), 
+                forecast_rmses.get(index_name, 0.05),
+                market_condition,
+                news_items,
+                factor_analyses[index_name],
+                money_flows[index_name]
+            )
+    
+    # 生成执行摘要
+    executive_summary = generate_executive_summary(
+        market_condition, 
+        rotation_analysis, 
+        recommendations, 
+        potential_etfs
+    )
+    
+    # 生成报告文本
+    report = f"智能ETF分析报告 ({datetime.datetime.now().strftime('%Y-%m-%d')})\n\n"
+    report += "【执行摘要】\n"
+    report += executive_summary + "\n\n"
+    
+    # 市场整体分析
+    market_text = {
+        'bullish': "当前市场整体呈牛市状态，各类资产普遍上涨",
+        'bearish': "当前市场整体呈熊市状态，需谨慎操作",
+        'neutral': "当前市场整体呈震荡状态，关注结构性机会"
+    }
+    report += f"【市场整体状况】\n"
+    report += f"- 市场趋势: {market_text[market_condition['overall']]}\n"
+    report += f"- 新闻情感: {'积极' if market_condition['news_sentiment'] > 0 else '消极' if market_condition['news_sentiment'] < 0 else '中性'} (得分: {market_condition['news_sentiment']:.2f})\n"
+    report += f"- 指数趋势: {'上升' if market_condition['index_trend'] > 0 else '下降' if market_condition['index_trend'] < 0 else '震荡'} ({market_condition['index_trend']:.2f}%)\n\n"
+    
+    # 市场情绪指标
+    if market_sentiment:
+        report += f"【市场情绪指标】\n"
+        report += f"- 融资余额: {market_sentiment['margin_balance']:,.0f} 元\n"
+        report += f"- 融券余额: {market_sentiment['short_balance']:,.0f} 元\n"
+        report += f"- 融资融券比率: {market_sentiment['margin_ratio']:.2f}\n"
+        report += f"- 市场情绪: {market_sentiment['sentiment']}\n\n"
+    
+    # 行业轮动分析
+    if rotation_analysis:
+        report += f"【行业轮动分析】\n"
+        report += f"- 市场广度: {rotation_analysis.get('market_breadth', 0):.2%} (上涨行业占比)\n"
+        report += f"- 平均表现: {rotation_analysis.get('avg_performance', 0):.2f}%\n"
+        if rotation_analysis.get('leading_sectors'):
+            report += f"- 领涨行业:\n"
+            for sector, perf in rotation_analysis.get('leading_sectors', []):
+                report += f"  • {INDEX_CONFIG.get(sector, {}).get('name', sector)}: {perf:.2f}%\n"
+        if rotation_analysis.get('lagging_sectors'):
+            report += f"- 落后行业:\n"
+            for sector, perf in rotation_analysis.get('lagging_sectors', []):
+                report += f"  • {INDEX_CONFIG.get(sector, {}).get('name', sector)}: {perf:.2f}%\n"
+        report += "\n"
+    
+    # 相关性分析
+    if correlation_result:
+        report += f"【相关性分析】\n"
+        if correlation_result['high_correlation_pairs']:
+            report += f"- 高相关性ETF对 (相关系数 > 0.7):\n"
+            for pair in correlation_result['high_correlation_pairs']:
+                report += f"  • {INDEX_CONFIG.get(pair[0], {}).get('name', pair[0])} & {INDEX_CONFIG.get(pair[1], {}).get('name', pair[1])}: {pair[2]:.3f}\n"
+        if correlation_result['low_correlation_pairs']:
+            report += f"- 低相关性ETF对 (相关系数 < 0.3):\n"
+            for pair in correlation_result['low_correlation_pairs']:
+                report += f"  • {INDEX_CONFIG.get(pair[0], {}).get('name', pair[0])} & {INDEX_CONFIG.get(pair[1], {}).get('name', pair[1])}: {pair[2]:.3f}\n"
+        if correlation_result['diversification_opportunities']:
+            report += f"- 最佳分散投资机会:\n"
+            for pair in correlation_result['diversification_opportunities']:
+                report += f"  • {INDEX_CONFIG.get(pair[0], {}).get('name', pair[0])} & {INDEX_CONFIG.get(pair[1], {}).get('name', pair[1])}: {pair[2]:.3f}\n"
+        report += "\n"
+    
+    # 在报告文本中添加轮动分析结果
+    report += "\n【Sector Rotation Analysis】\n"
+
+    if sector_analysis:
+        # 按评分排序
+        sorted_sectors = sorted(sector_analysis.items(), 
+                            key=lambda x: x[1]['sector_score'], reverse=True)
+        
+        report += "📊 Sector Score Ranking:\n"
+        for sector_key, analysis in sorted_sectors:
+            score = analysis['sector_score']
+            emoji = "🟢" if score >= 2 else "🟡" if score >= 0 else "🔴"
+            report += f"{emoji} {analysis['name']}: {score:.1f} - {analysis['recommendation']}\n"
+        
+        report += "\n🔍 Detailed Sector Analysis:\n"
+        for sector_key, analysis in sorted_sectors:
+            report += f"\n--- {analysis['name']} ---\n"
+            report += f"Description: {analysis['description']}\n"
+            report += f"Sector Score: {analysis['sector_score']:.1f} - {analysis['recommendation']}\n"
+            
+            # 该板块下的ETF分析
+            if analysis['etfs']:
+                # 按技术评分排序
+                sorted_etfs = sorted(analysis['etfs'], 
+                                key=lambda x: x['technical_score'], reverse=True)
+                
+                for etf in sorted_etfs:
+                    valuation_emoji = "💰" if etf['valuation'] == '低估' else "⚖️" if etf['valuation'] == '合理' else "💸"
+                    score_emoji = "✅" if etf['technical_score'] >= 2 else "⚠️" if etf['technical_score'] >= 0 else "❌"
+                    
+                    report += f"  {score_emoji} {etf['name']}({etf['code']}):\n"
+                    report += f"    Current Price: {etf['current_price']:.2f}\n"
+                    report += f"    Valuation: {valuation_emoji} {etf['valuation']}\n"
+                    report += f"    Technical Score: {etf['technical_score']:.1f}\n"
+                    report += f"    RSI: {etf['rsi']:.1f}\n"
+                    
+                    if etf['reasons']:
+                        report += f"    Key Reasons: {', '.join(etf['reasons'][:2])}\n"
+    else:
+        report += "❌ Sector rotation analysis data acquisition failed\n"
+
+    # 指数分析
+    report += "【各指数分析】\n"
+    for index_name, rec in recommendations.items():
+        config = INDEX_CONFIG[index_name]
+        report += f"\n--- {config['name']} ({config['code']}) ---\n"
+        report += f"操作建议: {rec['recommendation']}\n"
+        report += f"综合评分: {rec['score']}/8\n"
+        report += f"信心指数: {rec['confidence']}\n"
+        
+        # 添加机器学习预测结果
+        if index_name in ml_forecasts and ml_forecasts[index_name] is not None:
+            ml_forecast = ml_forecasts[index_name]
+            forecast_change = (ml_forecast['ML_Forecast'].iloc[-1] - cleaned_data[index_name]['Close'].iloc[-1]) / cleaned_data[index_name]['Close'].iloc[-1] * 100
+            report += f"机器学习预测: {forecast_change:.2f}% (使用模型: {ml_forecast['Model'].iloc[0]})\n"
+        
+        report += f"RSI指标: {rec['rsi']:.2f}\n"
+        report += f"波动率: {rec['volatility']:.2%}\n"
+        report += f"多因子得分: {rec['factor_score']:.2f}\n"
+        report += f"资金流信号: {rec['money_flow_signal']}\n"
+        report += f"\n{rec['detailed']}\n"
+    
+    # 新闻摘要
+    if news_items:
+        report += "\n\n【今日财经热点】\n"
+        for i, item in enumerate(news_items[:5], 1):  # 只显示前5条
+            sentiment_text = "【利好】" if item['sentiment_score'] > 0 else "【利空】" if item['sentiment_score'] < 0 else "【中性】"
+            report += f"{i}. {sentiment_text} {item['title']}\n"
+            report += f"   发布时间: {item['published_at'][:10]}\n"
+    
+    # 在有潜力ETF部分
+    if potential_etfs:
+        report += "\n\n【市场其他机会 - 有潜力ETF】\n"
+        report += "以下ETF近期表现突出，值得关注:\n\n"
+        
+        for i, etf in enumerate(potential_etfs, 1):
+            report += f"{i}. {etf['name']} ({etf['symbol']})\n"
+            report += f"   类别: {etf.get('category', '未知')}\n"
+            report += f"   当前价格: {etf['current_price']:.2f}\n"
+            report += f"   近期涨幅: {etf['recent_return']:.2f}%\n"
+            report += f"   平均成交量: {etf['avg_volume']:,.0f}\n\n"
+    
+    # 发送邮件
+    subject = f"📈 智能ETF分析报告 - {datetime.datetime.now().strftime('%Y-%m-%d')}"
+    success = send_email(subject, report, include_charts=True)
+    
+    if success:
+        print("✅ 分析报告已成功发送到邮箱！")
+    else:
+        print("❌ 分析报告发送失败")
+    
+    return success
+
+def plot_correlation_matrix(correlation_matrix):
+    """绘制相关性矩阵热力图"""
+    if correlation_matrix is None or correlation_matrix.empty:
+        return False
+    
+    plt.figure(figsize=(12, 10))
+    
+    # 创建热力图
+    mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
+    sns.heatmap(correlation_matrix, 
+                mask=mask,
+                annot=True, 
+                cmap='RdYlGn_r', 
+                center=0,
+                square=True,
+                cbar_kws={"shrink": .8},
+                annot_kws={"size": 10})
+    
+    plt.title('ETF Correlation Matrix', fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    
+    # 保存图像
+    plt.savefig(f"{ANALYSIS_CONFIG['report_path']}/correlation_matrix.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return True
+
+def send_email(subject, body, include_charts=True):
+    """
+    发送邮件
+    
+    :param subject: 邮件主题
+    :param body: 邮件正文
+    :param include_charts: 是否包含图表
+    :return: 发送是否成功
+    """
+    try:
+        # 创建邮件对象
+        from email.mime.multipart import MIMEMultipart
+        msg = MIMEMultipart()
+        
+        # 正确设置From和To头
+        msg['From'] = f"{encode_rfc2047(EMAIL_CONFIG['sender_name'])} <{EMAIL_CONFIG['sender_email']}>"
+        # 对于多个收件人，To头可以写第一个收件人
+        msg['To'] = f"{encode_rfc2047(EMAIL_CONFIG['receiver_name'])} <{EMAIL_CONFIG['receiver_emails'][0]}>"
+        
+        msg['Subject'] = subject
+        
+        # 构建HTML内容
+        html_content = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+                h1 {{ color: #2c3e50; }}
+                h2 {{ color: #34495e; border-bottom: 1px solid #eee; padding-bottom: 5px; }}
+                .report-container {{ max-width: 800px; margin: 0 auto; }}
+                .summary {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+                img {{ max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; }}
+                .chart-container {{ margin-bottom: 30px; }}
+                .disclaimer {{ font-size: 0.9em; color: #777; margin-top: 30px; padding-top: 10px; border-top: 1px solid #eee; }}
+                .recommendation {{ 
+                    padding: 15px; 
+                    border-radius: 5px; 
+                    margin: 10px 0;
+                    background-color: #e8f4fc;
+                }}
+                .strong-buy {{ background-color: #e6ffe6; }}
+                .buy {{ background-color: #f0fff0; }}
+                .hold {{ background-color: #f8f9fa; }}
+                .sell {{ background-color: #fff0f0; }}
+                .strong-sell {{ background-color: #ffe6e6; }}
+                .news-item {{ 
+                    border-left: 3px solid #ddd; 
+                    padding-left: 10px; 
+                    margin: 10px 0;
+                }}
+                .news-positive {{ border-left-color: #4CAF50; }}
+                .news-neutral {{ border-left-color: #9E9E9E; }}
+                .news-negative {{ border-left-color: #F44336; }}
+            </style>
+        </head>
+        <body>
+            <div class="report-container">
+                <h1>智能ETF分析报告 - {datetime.datetime.now().strftime('%Y-%m-%d')}</h1>
+                <div class="summary">
+                    <h2>市场整体状况</h2>
+                    <pre style="background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #eee; white-space: pre-wrap;">{body}</pre>
+                </div>
+        """
+        
+        # 如果包含图表，添加图表部分
+        if include_charts:
+            html_content += """
+                <div class="chart-container">
+                    <h2>1. 指数价格对比</h2>
+                    <img src="cid:index_price_comparison">
+                </div>
+                <div class="chart-container">
+                    <h2>2. 累计收益率对比</h2>
+                    <img src="cid:cumulative_return">
+                </div>
+                <div class="chart-container">
+                    <h2>3. RSI指标对比</h2>
+                    <img src="cid:rsi_comparison">
+                </div>
+                <div class="chart-container">
+                    <h2>4. 财经新闻情感分析</h2>
+                    <img src="cid:news_sentiment">
+                </div>
+            """
+            
+            # 添加相关性矩阵
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/correlation_matrix.png"):
+                html_content += """
+                <div class="chart-container">
+                    <h2>5. ETF相关性矩阵</h2>
+                    <img src="cid:correlation_matrix">
+                </div>
+                """
+            
+            # 添加行业轮动图
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/sector_rotation.png"):
+                html_content += """
+                <div class="chart-container">
+                    <h2>6. 行业轮动分析</h2>
+                    <img src="cid:sector_rotation">
+                </div>
+                """
+            
+            # 添加轮动分析图表
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/sector_rotation_analysis.png"):
+                html_content += """
+                <div class="chart-container">
+                    <h2>7. 板块轮动分析</h2>
+                    <img src="cid:sector_rotation_analysis">
+                </div>
+                """
+            
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/valuation_radar.png"):
+                html_content += """
+                <div class="chart-container">
+                    <h2>8. 估值雷达图</h2>
+                    <img src="cid:valuation_radar">
+                </div>
+                """
+        
+        # 为每个指数添加预测图表
+        for index_name in INDEX_CONFIG.keys():
+            forecast_chart = f"{index_name}_forecast"
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/{forecast_chart}.png"):
+                html_content += f"""
+                <div class="chart-container">
+                    <h2>9. {INDEX_CONFIG[index_name]['name']} 预测 ({ANALYSIS_CONFIG['forecast_days']}天)</h2>
+                    <img src="cid:{forecast_chart}">
+                </div>
+                """
+        
+        # 添加页脚
+        html_content += f"""
+                <div class="disclaimer">
+                    <p>本报告由杨辰的机器人系统自动生成，结合技术分析与新闻情感，仅供参考。</p>
+                    <p>生成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p>注：ARIMA预测基于历史数据，实际市场受多种因素影响，预测仅供参考。</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # 添加HTML内容
+        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+        
+        # 如果包含图表，添加图表作为内嵌图片
+        if include_charts:
+            # 初始化图表文件列表
+            chart_files = [
+                (f"{ANALYSIS_CONFIG['report_path']}/index_price_comparison.png", "index_price_comparison"),
+                (f"{ANALYSIS_CONFIG['report_path']}/cumulative_return.png", "cumulative_return"),
+                (f"{ANALYSIS_CONFIG['report_path']}/rsi_comparison.png", "rsi_comparison"),
+                (f"{ANALYSIS_CONFIG['report_path']}/news_sentiment.png", "news_sentiment")
+            ]
+            
+            # 添加相关性矩阵
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/correlation_matrix.png"):
+                chart_files.append((f"{ANALYSIS_CONFIG['report_path']}/correlation_matrix.png", "correlation_matrix"))
+            
+            # 添加行业轮动图
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/sector_rotation.png"):
+                chart_files.append((f"{ANALYSIS_CONFIG['report_path']}/sector_rotation.png", "sector_rotation"))
+            
+            # 添加轮动分析图表
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/sector_rotation_analysis.png"):
+                chart_files.append((f"{ANALYSIS_CONFIG['report_path']}/sector_rotation_analysis.png", "sector_rotation_analysis"))
+            
+            if os.path.exists(f"{ANALYSIS_CONFIG['report_path']}/valuation_radar.png"):
+                chart_files.append((f"{ANALYSIS_CONFIG['report_path']}/valuation_radar.png", "valuation_radar"))
+            
+            # 添加预测图表
+            for index_name in INDEX_CONFIG.keys():
+                forecast_chart = f"{index_name}_forecast"
+                chart_path = f"{ANALYSIS_CONFIG['report_path']}/{forecast_chart}.png"
+                if os.path.exists(chart_path):
+                    chart_files.append((chart_path, forecast_chart))
+            
+            # 添加所有图表文件到邮件
+            for file_path, cid in chart_files:
+                if os.path.exists(file_path):
+                    try:
+                        with open(file_path, 'rb') as f:
+                            img_data = f.read()
+                        image = MIMEImage(img_data)
+                        image.add_header('Content-ID', f'<{cid}>')
+                        msg.attach(image)
+                        print(f"✅ 成功添加图表: {file_path}")
+                    except Exception as e:
+                        print(f"⚠️ 添加图片 {file_path} 时出错: {str(e)}")
+                else:
+                    print(f"⚠️ 图表文件 {file_path} 不存在，跳过添加")
+        
+        # 发送邮件
+        try:
+            if EMAIL_CONFIG['use_ssl']:
+                server = smtplib.SMTP_SSL(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+            else:
+                server = smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+                server.starttls()
+            
+            server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
+            
+            # 发送给所有收件人
+            all_recipients = EMAIL_CONFIG['receiver_emails']
+            server.sendmail(
+                EMAIL_CONFIG['sender_email'], 
+                all_recipients,
+                msg.as_string()
+            )
+            server.quit()
+            print(f"✅ Email 成功发送到 {len(all_recipients)} 个收件人")
+            return True
+        except Exception as e:
+            print(f"❌ 发送失败: {str(e)}")
+            return False
+            
+    except Exception as e:
+        import traceback
+        print(f"❌ 发送功能有误: {str(e)}")
+        print(f"错误信息:\n{traceback.format_exc()}")
+        return False
+
+# ================
+# 监控功能
+# ================
+
+def monitor_etf_opportunities():
+    """
+    监控ETF机会，发现机会或危险时发送预警邮件
+    """
+    if not MONITOR_CONFIG['enabled']:
+        return
+    
+    current_hour = datetime.datetime.now().hour
+    current_time = datetime.datetime.now().strftime('%H:%M')
+    
+    # 检查是否在监控时间段内
+    if current_hour < MONITOR_CONFIG['start_hour'] or current_hour >= MONITOR_CONFIG['end_hour']:
+        print(f"⏰ 当前时间 {current_time} 不在监控时间段内 ({MONITOR_CONFIG['start_hour']}:00-{MONITOR_CONFIG['end_hour']}:00)")
+        return
+    
+    print(f"🔍 开始监控ETF机会 (时间: {current_time})...")
+    
+    # 获取所有指数数据
+    index_data = {}
+    for index_name in INDEX_CONFIG.keys():
+        # 只获取最近30天的数据用于监控
+        start_date = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+        index_data[index_name] = fetch_index_data_akshare(
+            INDEX_CONFIG[index_name]['code'], 
+            INDEX_CONFIG[index_name]['market'],
+            start_date, 
+            ANALYSIS_CONFIG['end_date']
+        )
+    
+    # 检查数据是否获取成功
+    if not any(data is not None and not data.empty for data in index_data.values()):
+        print("❌ 监控数据获取失败，跳过本次监控")
+        return
+    
+    # 数据清洗和指标计算
+    cleaned_data = {}
+    for index_name, data in index_data.items():
+        if data is not None and not data.empty:
+            cleaned_data[index_name] = calculate_indicators(clean_data(data))
+    
+    # 获取新闻
+    news_items = fetch_news()
+    
+    # 分析市场状况
+    market_condition = analyze_market_condition(news_items, cleaned_data)
+    
+    # 多因子分析
+    factor_analyses = {}
+    for index_name, data in cleaned_data.items():
+        if data is not None and not data.empty:
+            factor_analyses[index_name] = calculate_factor_exposure(data, index_name)
+    
+    # 资金流分析
+    money_flows = {}
+    for index_name, data in cleaned_data.items():
+        if data is not None and not data.empty:
+            money_flows[index_name] = money_flow_analysis(data)
+    
+    # 生成投资建议
+    recommendations = {}
+    for index_name in cleaned_data.keys():
+        if (cleaned_data[index_name] is not None and not cleaned_data[index_name].empty and 
+            index_name in factor_analyses and index_name in money_flows):
+            # 使用简化的监控版本，不需要预测
+            recommendations[index_name] = generate_investment_recommendation(
+                index_name, 
+                cleaned_data[index_name], 
+                None,  # 不使用预测
+                0.05,  # 默认RMSE
+                market_condition,
+                news_items,
+                factor_analyses[index_name],
+                money_flows[index_name]
+            )
+    
+    # 检查是否有需要预警的情况
+    alerts = []
+    for index_name, rec in recommendations.items():
+        if abs(rec['score']) >= MONITOR_CONFIG['alert_threshold']:
+            # 检查是否已经发送过预警（避免频繁发送）
+            last_alert_time = MONITOR_CONFIG['last_alert_sent'].get(index_name)
+            current_time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+            
+            if last_alert_time:
+                last_time = datetime.datetime.strptime(last_alert_time, '%Y-%m-%d %H:%M')
+                time_diff = (datetime.datetime.now() - last_time).total_seconds() / 3600  # 小时数
+                
+                # 如果上次预警是在6小时内发送的，跳过
+                if time_diff < MONITOR_CONFIG['interval_hours']:
+                    continue
+            
+            # 记录本次预警时间
+            MONITOR_CONFIG['last_alert_sent'][index_name] = current_time_str
+            
+            # 添加到预警列表
+            alerts.append({
+                'index_name': index_name,
+                'recommendation': rec,
+                'time': current_time_str
+            })
+    
+    # 如果有预警，发送预警邮件
+    if alerts:
+        subject = f"🚨 ETF监控预警 - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        body = f"ETF监控系统检测到以下机会/风险：\n\n"
+        
+        for alert in alerts:
+            index_name = alert['index_name']
+            rec = alert['recommendation']
+            config = INDEX_CONFIG[index_name]
+            
+            body += f"【{config['name']} ({config['code']})】\n"
+            body += f"预警级别: {'机会' if rec['score'] > 0 else '风险'}\n"
+            body += f"综合评分: {rec['score']}/8\n"
+            body += f"操作建议: {rec['recommendation']}\n"
+            body += f"RSI指标: {rec['rsi']:.2f}\n"
+            body += f"波动率: {rec['volatility']:.2%}\n"
+            body += f"多因子得分: {rec['factor_score']:.2f}\n"
+            body += f"资金流信号: {rec['money_flow_signal']}\n\n"
+        
+        body += f"检测时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        body += f"请注意市场变化，及时调整投资策略。\n"
+        
+        # 发送预警邮件
+        success = send_alert_email(subject, body)
+        if success:
+            print(f"✅ ETF监控预警已发送 ({len(alerts)} 条预警)")
+        else:
+            print("❌ ETF监控预警发送失败")
+    else:
+        print("✅ 监控完成，未发现需要预警的机会/风险")
+
+# ================
+# 定时任务
+# ================
+
+def schedule_daily_report():
+    """设置每日报告定时任务"""
+    print(f"已设置每日 {SCHEDULE_CONFIG['send_time']} 发送ETF分析报告")
+    
+    # 设置定时任务
+    for monitor_time in SCHEDULE_CONFIG['monitor_times']:
+        schedule.every().day.at(monitor_time).do(monitor_etf_opportunities)
+        print(f"已设置监控时间: {monitor_time}")
+    
+    # 设置每日报告
+    schedule.every().day.at(SCHEDULE_CONFIG['send_time']).do(send_analysis_report_by_email)
+    
+    # 立即运行一次监控（如果当前时间在监控时间段内）
+    current_hour = datetime.datetime.now().hour
+    if current_hour >= MONITOR_CONFIG['start_hour'] and current_hour < MONITOR_CONFIG['end_hour']:
+        print("正在立即运行一次监控...")
+        monitor_etf_opportunities()
+    
+    # 保持程序运行
+    print("程序已启动，按 Ctrl+C 退出...")
+    while True:
+        schedule.run_pending()
+        time.sleep(60)  # 每分钟检查一次
+
+# ================
+# 主函数
+# ================
+def main():
+    """主函数 - 可选择执行模式"""
+    print("="*50)
+    print("智能ETF分析系统 - 100%国内API版 (增强监控版)")
+    print("="*50)
+    
+    # 显示正在分析的指数
+    print("📊 正在分析的指数:")
+    for index_name, config in INDEX_CONFIG.items():
+        print(f"- {config['name']} ({config['code']})")
+    # 使用 receiver_emails
+    print(f"📧 邮件将发送至: {', '.join(EMAIL_CONFIG['receiver_emails'])}")
+    
+    # 显示监控配置
+    print(f"⏰ 监控配置: {MONITOR_CONFIG['start_hour']}:00-{MONITOR_CONFIG['end_hour']}:00, 每{MONITOR_CONFIG['interval_hours']}小时检测一次")
+    print(f"🔔 预警阈值: 评分绝对值 ≥ {MONITOR_CONFIG['alert_threshold']}")
+    
+    # 创建报告目录
+    os.makedirs(ANALYSIS_CONFIG['report_path'], exist_ok=True)
+    print(f"📁 已创建/确认报告目录: {ANALYSIS_CONFIG['report_path']}")
+    
+    # 检查Tushare Token
+    if ANALYSIS_CONFIG['tushare_token'] == '3ca0354b0471d760b50d9ce0789249b6c7c4613c54916d6a280938ee':
+        print("⚠️ Tushare Token错误，新闻分析功能将受限")
+    
+    # 询问用户选择模式
+    print("\n请选择运行模式:")
+    print("1. 单次执行并生成报告")
+    print("2. 启动定时监控模式 (持续运行)")
+    
+    choice = input("请输入选择 (1 或 2): ").strip()
+    
+    if choice == "1":
+        # 直接发送报告，不设置定时循环
+        print("\n🚀 开始生成分析报告...")
+        send_analysis_report_by_email()
+        print("\n✅ 报告生成完成，程序退出")
+    elif choice == "2":
+        # 启动定时监控模式
+        print("\n🚀 启动定时监控模式...")
+        print(f"📅 每日报告时间: {SCHEDULE_CONFIG['send_time']}")
+        print(f"⏰ 监控时间点: {', '.join(SCHEDULE_CONFIG['monitor_times'])}")
+        schedule_daily_report()
+    else:
+        print("❌ 无效选择，程序退出")
+    
+    return 0
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
